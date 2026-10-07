@@ -240,7 +240,7 @@ async function send(c, name, kind) {
     else if (kind === 'synth') c.synthesisReq = { to: name, ...stamp };
     else c.next = { to: name, packet, ...stamp };
     log(c, `${name} へ${kind === 'observe' ? '観測' : kind === 'synth' ? '統合' : '実行'}の依頼（${os.connector === 'manual' ? '手動コピー' : 'ローカル中継'}・${res.status}）`);
-    if (res.status === 'shown') showPacket(packet, res.note);
+    if (os.connector === 'manual') showPacket(packet, res.note, name, res.status === 'copied');
     if (res.status === 'answered' && res.text) { const out = ingest(c, res.text, 'API'); bump(c, 'autoReceive'); log(c, `${name} の回答を中継から受け取り（${out}）`); }
   } catch (e) { log(c, `${name} への送付に失敗（${e.message}）`); tell(name + ' へ送れませんでした: ' + e.message); }
   save(); render(); schedulePoll();
@@ -266,9 +266,11 @@ function schedulePoll() {
   clearInterval(pollTimer); const c = cur(); if (!c || !store.settings.proxyUrl) return;
   pollTimer = setInterval(() => { const c2 = cur(); if (c2) collectAll(c2, true); }, 8000);
 }
-function showPacket(packet, note) {
-  const d = document.createElement('dialog'); d.innerHTML = `<h2>依頼文</h2><p class="hint">${esc(note || '')}</p><textarea rows="16" readonly>${esc(packet)}</textarea><div class="row end"><button class="btn primary">閉じる</button></div>`;
-  document.body.appendChild(d); d.querySelector('button').onclick = () => { d.close(); d.remove(); }; d.showModal(); d.querySelector('textarea').select();
+// After a manual send, say in plain steps what the human does next (the packet is shown only if the clipboard failed).
+function showPacket(packet, note, name, copied) {
+  const steps = name ? `<ol class="steps"><li>${copied ? '依頼文をコピーしました' : '下の依頼文を全部選んでコピー'}</li><li><b>${esc(name)}</b> を開き、貼り付けて送る</li><li>${esc(name)} の返事を<b>全部</b>コピー</li><li>この画面の「結果を受け取る」に貼って「取り込む」</li></ol>` : '';
+  const d = document.createElement('dialog'); d.innerHTML = `<h2>${name ? esc(name) + ' へ依頼する手順' : '依頼文'}</h2>${steps}${note ? `<p class="hint">${esc(note)}</p>` : ''}${copied ? '' : `<textarea rows="12" readonly>${esc(packet)}</textarea>`}<div class="row end"><button class="btn primary">わかった</button></div>`;
+  document.body.appendChild(d); d.querySelector('button').onclick = () => { d.close(); d.remove(); }; d.showModal(); d.querySelector('textarea')?.select();
 }
 
 // ---------- stage state ----------
