@@ -1,0 +1,12 @@
+{
+  "experiment_id": "EXP-01-SOURCE-TRANSPORT-001",
+  "source_id": "EXP-01-001",
+  "filename": "SOURCE.zip",
+  "original_filename": "AI-Team-Studio-Evolution-Prototype-001-v1.1.zip",
+  "sha256": "855c3e770923f181e08af806cc3952ba0059c0f5202887d67af17c241ec57c18",
+  "size_bytes": 11589,
+  "source_type": "ZIP",
+  "source_role": "fixed observation source",
+  "status": "FIXED",
+  "truth_rule": "The SHA-256 identified bytes are the source of truth; URL/path alone is not source of truth."
+}
