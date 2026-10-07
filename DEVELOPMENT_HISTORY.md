@@ -255,3 +255,44 @@ Prototype 002 — future experiment
 Prototype 001 remains preserved as the first fixed Recognition Space artifact.
 
 The next implementation should be based on the observed differences above, not on assumptions made before the independent observation.
+
+---
+
+# 009 — Claude / Codex Independent Recheck
+
+### Purpose
+
+After Prototype 001 v1.1 was reflected to GitHub, Claude and Codex independently checked the same artifact. This entry records where their observations, evidence, and judgments matched and where they diverged.
+
+### Observation
+
+For the same v1.1, the two observers broadly agreed on the main integrity facts: the Prototype body (`index.html`) is unchanged, the Git change is limited to documentation, the target commit `a428a2a` is on GitHub `main`, and the GitHub Pages URL responds with HTTP 200.
+
+### Difference
+
+The final judgments diverged:
+
+- Claude: **HOLD**
+- Codex: **PASS** (for a limited scope)
+
+### Difference Origin Candidate
+
+The difference may have arisen from differences in Evidence threshold, Judgment boundary, Scope, or Action policy.
+
+The cause is not determined.
+
+### Important Observation
+
+For the same artifact, broad agreement on the facts did not produce agreement on the judgment.
+
+### UNKNOWN
+
+The browser console of the published page was not checked by either observer. Claude's in-app browser opened the published URL but was refused when reading the page content and console.
+
+### Relation to Next Space
+
+This observation may be a concrete instance of the "Difference Origin Space" fixed as a candidate in the Prototype 001 SYNTHESIS.
+
+Prototype 002 is not implemented by this record.
+
+For the detailed record, see [`INDEPENDENT_RECHECK_001.md`](INDEPENDENT_RECHECK_001.md).
