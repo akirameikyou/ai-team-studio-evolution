@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Team Studio — Integrated 002</title>
+<style>
+:root{
+  --bg:#f4f6f8; --surface:#ffffff; --surface2:#f8fafb; --line:#dfe5ea;
+  --ink:#1f2933; --muted:#6b7785; --blue:#2d6ea6; --blue2:#eaf3fb;
+  --green:#4f8b68; --amber:#a9782f; --red:#a95858; --shadow:0 8px 24px rgba(35,52,68,.08);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI","Noto Sans JP",sans-serif;line-height:1.55}
+button,input,textarea,select{font:inherit}
+button{cursor:pointer}
+.app{min-height:100vh}
+header{position:sticky;top:0;z-index:10;background:rgba(255,255,255,.96);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.top{max-width:1440px;margin:auto;padding:13px 22px;display:flex;align-items:center;justify-content:space-between;gap:20px}
+.brand{display:flex;align-items:center;gap:12px}.logo{width:34px;height:34px;border:1px solid #9db1c3;border-radius:8px;display:grid;place-items:center;color:var(--blue);font-weight:750;background:#fff}
+.brand b{font-size:15px;letter-spacing:.03em}.brand small{display:block;color:var(--muted);font-size:10px}
+.topright{display:flex;gap:10px;align-items:center}.save{font-size:11px;color:var(--muted)}
+.mode{border:1px solid var(--line);border-radius:999px;padding:4px 9px;font-size:10px;background:#fff}
+.layout{max-width:1440px;margin:auto;padding:18px 22px 45px;display:grid;grid-template-columns:220px minmax(0,1fr);gap:18px}
+aside{position:sticky;top:70px;height:max-content}.side{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:8px;box-shadow:var(--shadow)}
+.nav{display:flex;width:100%;border:0;background:none;color:var(--muted);padding:10px 11px;border-radius:8px;text-align:left;gap:9px;align-items:center}.nav:hover,.nav.active{background:var(--blue2);color:#214d72}
+.n{font-size:10px;color:#8a98a5;width:18px}
+.caseMini{margin-top:10px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;box-shadow:var(--shadow)}
+.caseMini h4{margin:0 0 4px;font-size:11px}.caseMini p{font-size:11px;margin:0;color:var(--muted)}
+main{min-width:0}.page{display:none}.page.active{display:block}
+.hero{padding:4px 2px 16px}.eyebrow{font-size:10px;letter-spacing:.16em;color:var(--blue);text-transform:uppercase}.hero h1{font-size:25px;line-height:1.25;margin:5px 0}.hero p{margin:0;color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:13px}.card{grid-column:span 12;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;box-shadow:var(--shadow)}.half{grid-column:span 6}.third{grid-column:span 4}
+label{display:block;font-size:11px;color:var(--muted);margin:0 0 5px}
+input,textarea,select{width:100%;border:1px solid #cfd8df;background:#fff;color:var(--ink);border-radius:8px;padding:9px 10px;outline:none}textarea{min-height:105px;resize:vertical}input:focus,textarea:focus,select:focus{border-color:#7ea4c2;box-shadow:0 0 0 2px #e9f2f9}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.between{justify-content:space-between}
+.btn{border:1px solid #c8d2da;background:#fff;color:var(--ink);border-radius:8px;padding:8px 11px}.btn:hover{background:#f4f7f9}.primary{background:#edf5fb;border-color:#a8c2d8;color:#24577e}.good{border-color:#a7c8b2}.hold{border-color:#d6bd91}.warn{border-color:#d5a5a5}
+.pill{font-size:10px;border:1px solid #d2dbe2;border-radius:999px;padding:3px 8px;color:var(--muted);background:#fff}
+.flow{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:12px}.flowStep{border:1px solid var(--line);border-radius:9px;padding:9px 5px;text-align:center;background:var(--surface2);font-size:10px;color:var(--muted)}.flowStep.active{background:var(--blue2);border-color:#b8cede;color:#24577e}
+.flowStep b{display:block;font-size:10px;color:inherit}.flowStep span{display:block;margin-top:3px}
+.task{border-top:1px solid var(--line);padding:13px 0}.task:first-child{border-top:0}.taskgrid{display:grid;grid-template-columns:150px 1fr 120px;gap:10px;align-items:start}.role{font-weight:650;font-size:12px}.task p{margin:2px 0;color:var(--muted);font-size:11px}.status{font-size:10px;border:1px solid var(--line);padding:3px 7px;border-radius:999px;text-align:center;color:var(--muted)}
+.observer{border-top:1px solid var(--line);padding:13px 0}.observer:first-child{border-top:0}.obgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.diffgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}.diffbox{border:1px solid var(--line);background:var(--surface2);border-radius:9px;padding:11px}.diffbox h3{margin:0 0 4px;font-size:12px}.diffbox p{margin:0;font-size:11px;color:var(--muted)}
+.notice{border-left:3px solid #7ea4c2;background:#f1f7fb;border-radius:0 8px 8px 0;padding:10px 12px;font-size:12px}.warnbox{border-left-color:#c39a55;background:#fcf7ee}
+table{width:100%;border-collapse:collapse;font-size:11px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-weight:500}
+pre{white-space:pre-wrap;word-break:break-word;background:#f7f9fa;border:1px solid var(--line);border-radius:8px;padding:11px;font-size:11px;max-height:350px;overflow:auto}
+footer{max-width:1440px;margin:auto;padding:0 22px 35px;color:#87939f;font-size:10px}
+@media(max-width:900px){.layout{grid-template-columns:1fr}aside{position:static}.side{display:flex;overflow:auto}.nav{white-space:nowrap}.caseMini{display:none}.half,.third{grid-column:span 12}.flow{grid-template-columns:repeat(2,1fr)}.taskgrid,.obgrid{grid-template-columns:1fr}.top{padding:11px 14px}.layout{padding:12px 14px 35px}}
+</style>
+</head>
+<body>
+<div class="app">
+<header><div class="top">
+  <div class="brand"><div class="logo">AI</div><div><b>AI Team Studio</b><small>Integrated 002 · CASE / SOURCE / OBSERVE / DIFFERENCE / SYNTHESIS / GATE / NEXT</small></div></div>
+  <div class="topright"><span class="save" id="saveState">LOCAL / READY</span><span class="mode" id="modeBadge">EXPLORE</span></div>
+</div></header>
+
+<div class="layout">
+<aside>
+<div class="side">
+<button class="nav active" data-page="case"><span class="n">01</span>今回の問い</button>
+<button class="nav" data-page="source"><span class="n">02</span>現物 SOURCE</button>
+<button class="nav" data-page="observe"><span class="n">03</span>観測 LENS</button>
+<button class="nav" data-page="difference"><span class="n">04</span>差分 DIFFERENCE</button>
+<button class="nav" data-page="synthesis"><span class="n">05</span>統合 SYNTHESIS</button>
+<button class="nav" data-page="gate"><span class="n">06</span>人間判断 GATE</button>
+<button class="nav" data-page="next"><span class="n">07</span>次の行動 NEXT</button>
+</div>
+<div class="caseMini"><h4>現在のCase</h4><p id="miniCase">新しいCase</p></div>
+</aside>
+
+<main>
+<section class="page active" id="case">
+<div class="hero"><div class="eyebrow">01 · CASE</div><h1>今回、何を一緒に見ますか？</h1><p>人間は簡単な問いを置く。Studioが次のAI作業に必要な形へ整理する。</p></div>
+<div class="grid">
+<div class="card half"><label>今回の問い</label><input id="caseTitle" placeholder="例：P-LINKの人物データ基盤をどう改善するか？"></div>
+<div class="card half"><label>MODE</label><select id="caseMode"><option>EXPLORE</option><option>EXECUTE</option></select></div>
+<div class="card half"><label>人間の目的</label><textarea id="caseGoal" placeholder="何を明らかにし、何を次に実行したいか。"></textarea></div>
+<div class="card half"><label>初期コンテキスト</label><textarea id="caseContext" placeholder="既知 / 未知 / 制約。まだ判断しないものも書く。"></textarea></div>
+<div class="card"><div class="notice"><b>最初の原則：</b>この画面では結論を作らない。問いを置き、SOURCEとTASKを準備する。</div><div class="flow">
+<div class="flowStep active"><b>01</b><span>CASE</span></div><div class="flowStep"><b>02</b><span>SOURCE</span></div><div class="flowStep"><b>03</b><span>OBSERVE</span></div><div class="flowStep"><b>04</b><span>DIFFERENCE</span></div><div class="flowStep"><b>05</b><span>SYNTHESIS</span></div><div class="flowStep"><b>06</b><span>GATE</span></div><div class="flowStep"><b>07</b><span>NEXT</span></div>
+</div></div>
+</div></section>
+
+<section class="page" id="source">
+<div class="hero"><div class="eyebrow">02 · SOURCE</div><h1>何を見ますか？</h1><p>現物・説明・観測条件を分ける。AIが読みに行ける状態を作る。</p></div>
+<div class="grid">
+<div class="card half"><label>SOURCE ID</label><input id="sourceId" placeholder="SOURCE-001"><label style="margin-top:9px">公開場所 / URL / repo path</label><input id="sourceUrl" placeholder="GitHub / ファイル / URL"><label style="margin-top:9px">FORMAT</label><input id="sourceFormat" placeholder="HTML / ZIP / JSON / MD ..."></div>
+<div class="card half"><label>ACCESS</label><select id="sourceAccess"><option>DIRECT — 現物を確認できる</option><option>REPORTED — 報告のみ</option><option>INACCESSIBLE — アクセス不能</option><option>UNKNOWN — 条件不明</option></select><label style="margin-top:9px">SHA-256（確認済みなら）</label><input id="sourceHash" class="mono" placeholder="未確認なら空欄"><label style="margin-top:9px">Observation Condition</label><textarea id="sourceCondition" placeholder="Model / Tool / Environment / Permission / Access"></textarea></div>
+<div class="card"><div class="row"><button class="btn primary" onclick="addSource()">＋ 上の内容をSOURCEとして登録</button><span class="pill">複数登録できます</span></div></div>
+<div class="card"><div class="row between"><b>Source Library</b><span class="pill">READ / CLAIM / UNKNOWN を区別</span></div><table><thead><tr><th>ID</th><th>内容</th><th>状態</th><th></th></tr></thead><tbody id="sourceTable"></tbody></table></div>
+</div></section>
+
+<section class="page" id="observe">
+<div class="hero"><div class="eyebrow">03 · OBSERVE / LENS</div><h1>それぞれのAIが、何を見たか</h1><p>Observerごとに条件と結果を残す。結果を先に混ぜない。</p></div>
+<div class="card">
+<div id="tasks"></div>
+<div class="row"><button class="btn primary" onclick="addTask()">＋ Observer Taskを追加</button><button class="btn" onclick="copyTaskPacket()">TASK PACKETをコピー</button></div>
+</div>
+<div class="card" style="margin-top:13px"><label>共通観測プロトコル</label><textarea id="protocol" placeholder="Observation / Evidence / Unknown / Inferenceを区別する。見えないものを推測で埋めない。"></textarea></div>
+</section>
+
+<section class="page" id="difference">
+<div class="hero"><div class="eyebrow">04 · DIFFERENCE</div><h1>違いはどこから生じた？</h1><p>正誤を急がず、差分の発生源を記録する。</p></div>
+<div class="card"><div class="diffgrid" id="diffGrid"></div></div>
+<div class="card" style="margin-top:13px"><label>Difference Origin</label><textarea id="differenceOrigin" placeholder="SOURCE / CONTEXT / STATE / OBSERVER / EVIDENCE / REASONING / JUDGMENT"></textarea></div>
+</section>
+
+<section class="page" id="synthesis">
+<div class="hero"><div class="eyebrow">05 · SYNTHESIS</div><h1>次の仕事ができる形にまとめる</h1><p>統合は「平均」ではなく、共通核・分岐・UNKNOWN・実行条件を作る。</p></div>
+<div class="grid">
+<div class="card half"><label>共通して確認できたこと</label><textarea id="common"></textarea></div>
+<div class="card half"><label>分岐していること</label><textarea id="branches"></textarea></div>
+<div class="card half"><label>まだ言えないこと</label><textarea id="unknowns"></textarea></div>
+<div class="card half"><label>次の実行に必要な情報</label><textarea id="executionNeed"></textarea></div>
+<div class="card"><label>実装 / 実行Task（次のAIへ渡す内容）</label><textarea id="nextTask" placeholder="Claude / Codex等が、このCaseから直接読んで実行できる指示にする。"></textarea></div>
+</div></section>
+
+<section class="page" id="gate">
+<div class="hero"><div class="eyebrow">06 · HUMAN GATE</div><h1>ここだけは、人間が決める</h1><p>AIの整理結果を、そのまま採用しない。</p></div>
+<div class="grid">
+<div class="card"><div class="row"><button class="btn good" onclick="setGate('APPROVE')">APPROVE</button><button class="btn hold" onclick="setGate('HOLD')">HOLD</button><button class="btn warn" onclick="setGate('REVISE')">REVISE</button><span class="pill" id="gateState">未判断</span></div><label style="margin-top:12px">判断理由</label><textarea id="gateReason" placeholder="何を採用し、何を保留し、何を修正するか。"></textarea></div>
+<div class="card"><div class="notice warnbox"><b>判断の境界：</b>収集・整形・比較・記録は自動化してよい。意味づけ・採否・次の重要な判断は人間が担う。</div></div>
+</div></section>
+
+<section class="page" id="next">
+<div class="hero"><div class="eyebrow">07 · NEXT</div><h1>次のAIが、ここを読めば動ける</h1><p>今回の結果を、次の認識空間と実行Taskへ渡す。</p></div>
+<div class="grid">
+<div class="card half"><label>次に変える観測条件</label><textarea id="nextCondition"></textarea></div>
+<div class="card half"><label>次に実行すること</label><textarea id="nextAction"></textarea></div>
+<div class="card"><div class="row"><button class="btn primary" onclick="exportCase()">CASE JSONを書き出す</button><button class="btn" onclick="copyCompactPacket()">COMPACT PACKETをコピー</button><button class="btn" onclick="copyFullPacket()">FULL PACKETをコピー</button><button class="btn" onclick="save()">保存</button><label class="btn" style="margin:0">CASE JSONを読み込む<input type="file" id="importFile" accept=".json,application/json" style="display:none" onchange="importCase(this)"></label></div><pre id="packetPreview"></pre></div>
+</div></section>
+</main>
+</div>
+<footer>AI Team Studio Integrated 002 · local-first · AI API未接続 · human judgment remains explicit</footer>
+
+<script>
+const KEY="ai-team-studio-integrated-002";
+let state={
+ caseTitle:"",caseMode:"EXPLORE",caseGoal:"",caseContext:"",
+ sourceId:"",sourceUrl:"",sourceFormat:"",sourceAccess:"DIRECT — 現物を確認できる",sourceHash:"",sourceCondition:"",
+ sources:[],
+ protocol:"Observation / Evidence / Unknown / Inferenceを区別する。見えないものを推測で埋めない。",
+ tasks:[
+  {role:"GPT / Architect",goal:"Caseを構造化し、観測結果を統合する",condition:"",result:"",status:"WAITING"},
+  {role:"Claude Code",goal:"現物・実装・ファイル構造を観測する",condition:"",result:"",status:"WAITING"},
+  {role:"Gemini",goal:"SOURCE・データ・出典を監査する",condition:"",result:"",status:"WAITING"},
+  {role:"Codex",goal:"実装可能性・変更案・検証方法を観測する",condition:"",result:"",status:"WAITING"},
+  {role:"Meta / Independent",goal:"独立視点から認識差分を観測する",condition:"",result:"",status:"WAITING"}
+ ],
+ differenceOrigin:"",common:"",branches:"",unknowns:"",executionNeed:"",nextTask:"",
+ gateState:"未判断",gateReason:"",nextCondition:"",nextAction:""
+};
+const $=id=>document.getElementById(id);
+function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
+// saveBlocked: a stored value that cannot be read is never overwritten.
+let saveBlocked=false;
+function blockSave(msg){saveBlocked=true;$("saveState").textContent=msg;$("saveState").style.color="var(--red)"}
+function save(){
+ if(saveBlocked){renderPacket();return}
+ try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){$("saveState").textContent="SAVE FAILED: "+e.name+" — CASE JSONを書き出してください";$("saveState").style.color="var(--red)";return}
+ $("saveState").textContent="LOCAL / SAVED";renderPacket();setTimeout(()=>{if(!saveBlocked)$("saveState").textContent="LOCAL / READY"},900)
+}
+function load(){
+ let raw=null;
+ try{raw=localStorage.getItem(KEY)}catch(e){blockSave("保存領域を読めません — 上書きを防ぐため保存を停止中")}
+ if(raw!=null){
+  try{const x=JSON.parse(raw);if(!x||typeof x!=="object"||Array.isArray(x))throw new Error("shape");state={...state,...x};if(!Array.isArray(state.sources))state.sources=[]}
+  catch(e){blockSave("保存データを読めません — 上書きを防ぐため保存を停止中（CASE JSONで書き出せます）")}
+ }
+ bind()
+}
+function bind(){
+ ["caseTitle","caseMode","caseGoal","caseContext","sourceId","sourceUrl","sourceFormat","sourceAccess","sourceHash","sourceCondition","protocol","differenceOrigin","common","branches","unknowns","executionNeed","nextTask","gateReason","nextCondition","nextAction"].forEach(id=>{const e=$(id);if(!e)return;e.value=state[id]??"";e.oninput=()=>{state[id]=e.value;update()}})
+ $("modeBadge").textContent=state.caseMode;$("miniCase").textContent=state.caseTitle||"新しいCase";
+ $("gateState").textContent=state.gateState||"未判断";
+ renderTasks();renderSources();renderDiff();renderPacket()
+}
+function update(){state.caseTitle=$("caseTitle").value;state.caseMode=$("caseMode").value;$("modeBadge").textContent=state.caseMode;$("miniCase").textContent=state.caseTitle||"新しいCase";save()}
+function renderSources(){
+ $("sourceTable").innerHTML=state.sources.length?state.sources.map((s,i)=>`<tr><td>${esc(s.id)}</td><td>${esc(s.format||"未設定")}<br><span style="color:var(--muted)">${esc(s.url||"")}</span>${s.hash?`<br><span style="color:var(--muted);word-break:break-all">SHA-256: ${esc(s.hash)}</span>`:""}</td><td>${esc(s.access||"UNKNOWN")}${s.condition?`<br><span style="color:var(--muted)">${esc(s.condition)}</span>`:""}</td><td><button class="btn" onclick="removeSource(${i})">削除</button></td></tr>`).join(""):`<tr><td colspan="4" style="color:var(--muted)">まだ登録されていません</td></tr>`
+}
+function addSource(){
+ const s={id:state.sourceId.trim(),url:state.sourceUrl.trim(),format:state.sourceFormat.trim(),access:state.sourceAccess,hash:state.sourceHash.trim(),condition:state.sourceCondition.trim()};
+ if(!s.id){alert("SOURCE IDを入れてください");return}
+ if(state.sources.some(x=>x.id===s.id)&&!confirm(s.id+" は登録済みです。上書きしますか？"))return;
+ state.sources=state.sources.filter(x=>x.id!==s.id).concat([s]);
+ ["sourceId","sourceUrl","sourceFormat","sourceHash","sourceCondition"].forEach(k=>{state[k]="";$(k).value=""});
+ save();renderSources()
+}
+function removeSource(i){if(!confirm(state.sources[i].id+" を削除しますか？"))return;state.sources.splice(i,1);save();renderSources()}
+function renderTasks(){
+ $("tasks").innerHTML=state.tasks.map((t,i)=>`<div class="task"><div class="taskgrid"><div><div class="role">${esc(t.role)}</div><p>${esc(t.goal)}</p></div><div><label>Observer Condition</label><textarea data-i="${i}" data-k="condition" placeholder="Model / Tool / Environment / Access">${esc(t.condition)}</textarea><label style="margin-top:7px">Observation Result</label><textarea data-i="${i}" data-k="result" placeholder="Observation / Evidence / Unknown">${esc(t.result)}</textarea></div><div><div class="status">${t.result.trim()?"OBSERVED":"WAITING"}</div><button class="btn" style="margin-top:8px" onclick="removeTask(${i})">削除</button></div></div></div>`).join("");
+ $("tasks").querySelectorAll("textarea").forEach(e=>e.oninput=()=>{state.tasks[+e.dataset.i][e.dataset.k]=e.value;save()})
+}
+function addTask(){state.tasks.push({role:"Observer "+(state.tasks.length+1),goal:"独立観測",condition:"",result:"",status:"WAITING"});save();renderTasks()}
+function removeTask(i){if(state.tasks.length<=1)return;state.tasks.splice(i,1);save();renderTasks()}
+function renderDiff(){
+ const labels=["SOURCE","CONTEXT","STATE","OBSERVER","EVIDENCE","REASONING","JUDGMENT"];
+ $("diffGrid").innerHTML=labels.map(x=>`<div class="diffbox"><h3>${x}</h3><p>${x==="SOURCE"?"現物・形式・identity":x==="CONTEXT"?"与えられた前提":x==="STATE"?"Caseの現在状態":x==="OBSERVER"?"AI / model / role":x==="EVIDENCE"?"根拠・出典":x==="REASONING"?"推論経路":"最終判断・採否"}</p></div>`).join("")
+}
+function setGate(v){state.gateState=v;$("gateState").textContent=v;save()}
+function packet(full=true){
+ const src=state.sources.length?state.sources.map(s=>`- ${s.id} | FORMAT: ${s.format||"UNKNOWN"} | ACCESS: ${s.access||"UNKNOWN"} | HASH: ${s.hash||"UNVERIFIED"} | LOCATION: ${s.url||"未設定"}`).join("\n"):"- 未設定";
+ let p=`AI TEAM STUDIO PACKET ${full?"FULL":"COMPACT"}\nCASE: ${state.caseTitle||"未設定"}\nMODE: ${state.caseMode}\nSOURCES:\n${src}\nQUESTION: ${state.caseGoal||"未設定"}\nPROTOCOL: ${state.protocol||"UNKNOWN"}\n`;
+ if(!full)return p+`\nTASK: 独立観測。Observation / Evidence / Unknown / Inferenceを分離。\nRETURN: Observation / Evidence / Unknown / Difference / Next Condition`;
+ p+=`\nTASKS:\n`+state.tasks.map(t=>`- ${t.role}\n  goal: ${t.goal}\n  condition: ${t.condition||"UNKNOWN"}\n  result: ${t.result||"未入力"}`).join("\n");
+ p+=`\n\nDIFFERENCE ORIGIN:\n${state.differenceOrigin||"未設定"}\nSYNTHESIS:\ncommon: ${state.common||"未設定"}\nbranches: ${state.branches||"未設定"}\nunknowns: ${state.unknowns||"未設定"}\nexecutionNeed: ${state.executionNeed||"未設定"}\nnextTask: ${state.nextTask||"未設定"}\nHUMAN GATE: ${state.gateState}\nreason: ${state.gateReason||"未設定"}\nNEXT CONDITION: ${state.nextCondition||"未設定"}\nNEXT ACTION: ${state.nextAction||"未設定"}`;
+ return p
+}
+function renderPacket(){$("packetPreview").textContent=packet(true)}
+async function copy(t){
+ let ok=false;
+ try{await navigator.clipboard.writeText(t);ok=true}catch(e){
+  const ta=document.createElement("textarea");ta.value=t;document.body.appendChild(ta);ta.select();try{ok=document.execCommand("copy")}catch(_){}ta.remove()
+ }
+ if(ok){$("saveState").textContent="CLIPBOARD / COPIED";setTimeout(()=>{if(!saveBlocked)$("saveState").textContent="LOCAL / READY"},1000)}
+ else{$("saveState").textContent="COPY FAILED — 下のプレビューから手でコピーしてください";$("packetPreview").textContent=t}
+}
+function copyTaskPacket(){copy(packet(false))}
+function copyCompactPacket(){copy(packet(false))}
+function copyFullPacket(){copy(packet(true))}
+function exportCase(){const out={...state,exportedAt:new Date().toISOString(),schema:"CASE_PACKET_v0.1",app:"AI Team Studio Integrated 002"};const b=new Blob([JSON.stringify(out,null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="CASE_PACKET.json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+async function importCase(input){
+ const f=input.files&&input.files[0];input.value="";if(!f)return;
+ try{
+  const o=JSON.parse(await f.text());
+  if(!o||o.schema!=="CASE_PACKET_v0.1")throw new Error("CASE_PACKET_v0.1 ではありません");
+  if(!confirm("現在のCaseを、読み込んだCase（"+(o.caseTitle||"無題")+"）で置き換えます。よろしいですか？"))return;
+  const {exportedAt,schema,app,...rest}=o;state={...state,...rest};if(!Array.isArray(state.sources))state.sources=[];
+  saveBlocked=false;$("saveState").style.color="";save();bind();alert("読み込みました")
+ }catch(e){alert("読み込めません: "+e.message)}
+}
+document.querySelectorAll(".nav").forEach(b=>b.onclick=()=>{document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));$(b.dataset.page).classList.add("active");document.querySelectorAll(".nav").forEach(x=>x.classList.remove("active"));b.classList.add("active");renderPacket();scrollTo({top:0,behavior:"smooth"})})
+load();
+</script>
+</body>
+</html>
