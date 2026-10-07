@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Team Studio — 実運用版 001</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand"><span class="mark">AI</span><div><b>AI Team Studio</b><small>実運用版 001</small></div></div>
+    <button id="newCaseBtn" class="btn wide">＋ 新しい問い</button>
+    <div class="side-label">これまでの問い</div>
+    <div id="caseList" class="case-list"></div>
+    <div class="side-bottom">
+      <button id="settingsBtn" class="btn ghost wide">AIの接続設定</button>
+      <div class="side-note">保存先：このブラウザ<br>外部への送信：<span id="netNote">なし</span></div>
+    </div>
+  </aside>
+
+  <main>
+    <div id="saveWarn" class="save-warn" hidden></div>
+    <!-- 入口：問いを書くだけ -->
+    <section id="start" class="start" hidden>
+      <h1>何を一緒に調べますか？</h1>
+      <p class="lead">普通の文で問いを書いてください。URLやファイル名が入っていれば、Studioが資料（SOURCE）として取り出します。各AIへの依頼文、結果の整理、比較、次の作業の依頼文はStudioが作ります。<b>あなたが決めるのは、最後の判断だけです。</b></p>
+      <textarea id="qInput" rows="5" placeholder="例：北斎の晩年の活動について調べたい。参考：https://..."></textarea>
+      <details class="opt"><summary>参加するAIを選ぶ（任意）</summary><div id="obsPick" class="pick"></div></details>
+      <button id="startBtn" class="btn primary big">始める</button>
+    </section>
+
+    <!-- ケース作業面 -->
+    <section id="work" hidden>
+      <div class="case-head">
+        <div class="eyebrow" id="caseId"></div>
+        <h1 id="caseTitle"></h1>
+      </div>
+
+      <ol class="stepper" id="stepper"></ol>
+
+      <div class="next card" id="nextCard">
+        <div class="next-label">次にすること</div>
+        <div class="next-text" id="nextText"></div>
+        <div class="next-actions" id="nextActions"></div>
+      </div>
+
+      <div class="grid">
+        <div class="col">
+          <div class="card">
+            <div class="card-h"><h2>資料 SOURCE</h2><span class="hint">存在と、AIが読めたかは別に記録します</span></div>
+            <div id="sources"></div>
+            <div class="row">
+              <input id="srcAdd" placeholder="URL・GitHub・ファイル名・メモを追加">
+              <button id="srcAddBtn" class="btn">追加</button>
+              <label class="btn">ファイルを確かめる<input id="srcFile" type="file" hidden></label>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h"><h2>観測 OBSERVE</h2><span class="hint">各AIの結果は混ぜずに別々に保存します</span></div>
+            <div id="observers"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-h"><h2>結果を受け取る</h2><span class="hint">貼るだけ。誰の結果かはStudioが判定します</span></div>
+            <textarea id="pasteBox" rows="5" placeholder="AIの回答をそのまま貼り付け（またはファイルをここへドロップ）"></textarea>
+            <div class="row"><button id="pasteBtn" class="btn primary">取り込む</button><span id="pasteMsg" class="hint"></span></div>
+          </div>
+        </div>
+
+        <div class="col">
+          <div class="card">
+            <div class="card-h"><h2>差分 DIFFERENCE</h2><span class="hint">違いは誤りではなく、どこから生じたかを残します</span></div>
+            <div id="difference"></div>
+          </div>
+          <div class="card">
+            <div class="card-h"><h2>統合 SYNTHESIS</h2><span class="hint">共通点・相違点・不明・保留・実行に必要なこと</span></div>
+            <div id="synthesis"></div>
+          </div>
+          <div class="card">
+            <div class="card-h"><h2>人間の判断 GATE</h2><span class="hint">ここだけはあなたが決めます</span></div>
+            <div id="gate"></div>
+          </div>
+          <div class="card">
+            <div class="card-h"><h2>次の行動 NEXT</h2><span class="hint">実装AIがこれだけで作業を始められる依頼</span></div>
+            <div id="next"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><h2>記録</h2><span class="hint">なぜこの判断になったかを後から追えます</span></div>
+        <div id="meter" class="meter"></div>
+        <div class="row"><button id="exportBtn" class="btn">記録をJSONで保存</button><label class="btn">JSONを読み込む<input id="importFile" type="file" accept=".json" hidden></label><button id="mdBtn" class="btn">Markdownで保存</button></div>
+        <details><summary>経過（自動記録）</summary><ol id="log" class="log"></ol></details>
+      </div>
+    </section>
+  </main>
+</div>
+
+<dialog id="settings">
+  <form method="dialog">
+    <h2>AIの接続設定</h2>
+    <p class="hint">各AIへの渡し方を選びます。<b>手動</b>＝依頼文をコピーして貼る。<b>ローカル中継</b>＝手元で動かす中継サーバー経由（Claude Code・Codexは依頼ファイルを自分で読み、結果ファイルを書く。APIはサーバー側の鍵で呼ぶ）。APIキーはこの画面にもGitHubにも保存しません。</p>
+    <label>ローカル中継のURL<input id="proxyUrl" placeholder="http://127.0.0.1:8787"></label>
+    <div class="row"><button id="proxyTest" type="button" class="btn">接続を確認</button><span id="proxyMsg" class="hint"></span></div>
+    <table class="tbl"><thead><tr><th>AI</th><th>渡し方</th><th>中継先（ローカル中継のとき）</th></tr></thead><tbody id="connRows"></tbody></table>
+    <div class="row"><input id="newObs" placeholder="AIを追加（例：Perplexity）"><button id="newObsBtn" type="button" class="btn">追加</button></div>
+    <div class="row end"><button class="btn primary">閉じる</button></div>
+  </form>
+</dialog>
+
+<script src="connectors.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,3 @@
+proxy/.env
+proxy/exchange/
+__pycache__/
