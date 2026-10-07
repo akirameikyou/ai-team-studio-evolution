@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Team Studio Evolution — Prototype 001</title>
+<style>
+:root{--bg:#f4f1e9;--paper:#fffdf8;--ink:#20211f;--muted:#74756f;--line:#d9d5ca;--accent:#3e5964;--hold:#8a6a35;}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:30px 5vw 22px;border-bottom:1px solid var(--line);background:rgba(255,253,248,.75)}
+.kicker{font-size:11px;letter-spacing:.16em;color:var(--muted)} h1{font-size:25px;font-weight:500;margin:4px 0} header p{margin:0;color:var(--muted)}
+main{max-width:1180px;margin:28px auto;padding:0 22px 60px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.card{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:20px;box-shadow:0 3px 15px rgba(40,40,30,.035)}
+.full{grid-column:1/-1}.label{font-size:11px;letter-spacing:.14em;color:var(--muted);margin-bottom:8px}.field{width:100%;border:1px solid var(--line);border-radius:8px;background:#fffefb;padding:11px 12px;color:var(--ink);font:inherit;resize:vertical;min-height:90px}.small{min-height:48px}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.observer{border-top:1px solid var(--line);padding:14px 0}.observer:first-child{border-top:0;padding-top:0}.observer-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}.observer-name{font-weight:600}.status{font-size:11px;padding:2px 7px;border:1px solid var(--line);border-radius:99px;color:var(--muted)}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}button{border:1px solid var(--line);background:#f8f6ef;border-radius:7px;padding:8px 12px;cursor:pointer;color:var(--ink)}button.primary{background:var(--accent);color:white;border-color:var(--accent)}button.warn{background:#f6efe1;color:#60491f}.decision{display:flex;gap:8px}.decision button.active{outline:2px solid var(--accent);outline-offset:1px}.diff{white-space:pre-wrap;min-height:100px;background:#f7f4ec;border:1px dashed var(--line);border-radius:8px;padding:12px}.history{display:grid;gap:9px}.history-item{padding:10px 12px;border-left:3px solid var(--accent);background:#faf8f2}.history-item b{font-weight:600}.foot{color:var(--muted);font-size:12px;margin-top:20px}
+@media(max-width:800px){.grid{grid-template-columns:1fr}.full{grid-column:auto}.row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div class="kicker">AI TEAM STUDIO EVOLUTION</div>
+  <h1>Prototype 001 — Recognition Space</h1>
+  <p>Observe → Difference → Synthesis → Fix → Next Space</p>
+</header>
+<main>
+<div class="grid">
+<section class="card">
+  <div class="label">SPACE / SOURCE</div>
+  <input id="source" class="field small" value="WU-1A Fact Check — Claude PASS-C / Codex HOLD">
+  <div class="label" style="margin-top:14px">CONTEXT</div>
+  <textarea id="context" class="field">同じ対象を観測しているが、利用できる証拠・実行環境・検証範囲に差がある。判断だけでなく、判断可能性と未知を観測する。</textarea>
+  <div class="label" style="margin-top:14px">STATE</div>
+  <input id="state" class="field small" value="Prototype 001 / Initial Observation">
+</section>
+<section class="card">
+  <div class="label">OBSERVATION PROTOCOL</div>
+  <div class="row">
+    <div><div class="label">JUDGMENT</div><textarea id="judgment" class="field">HOLD — まず観測可能性を確定する。</textarea></div>
+    <div><div class="label">REASON</div><textarea id="reason" class="field">証拠の存在は確認できても、実行再現と要件対応の全域までは確認できていない。</textarea></div>
+  </div>
+  <div class="label" style="margin-top:14px">EVIDENCE</div><textarea id="evidence" class="field">Claude local JSONL にブラウザ操作、server command、T1–T23、UI/state、console等の記録が存在する。</textarea>
+  <div class="label" style="margin-top:14px">UNKNOWN</div><textarea id="unknown" class="field">正式なWU-1A要求仕様との完全な対応表／Codexによるブラウザ再現。</textarea>
+</section>
+<section class="card full">
+  <div class="label">OBSERVERS — INDEPENDENT INPUT</div>
+  <div id="observers">
+    <div class="observer"><div class="observer-head"><span class="observer-name">GPT / Architect</span><span class="status">not yet observed</span></div><textarea class="field observer-text" data-observer="GPT" placeholder="独立観測を記録…"></textarea></div>
+    <div class="observer"><div class="observer-head"><span class="observer-name">Claude / Runtime & Implementation</span><span class="status">not yet observed</span></div><textarea class="field observer-text" data-observer="Claude" placeholder="独立観測を記録…"></textarea></div>
+    <div class="observer"><div class="observer-head"><span class="observer-name">Gemini / Data & Source Audit</span><span class="status">not yet observed</span></div><textarea class="field observer-text" data-observer="Gemini" placeholder="独立観測を記録…"></textarea></div>
+    <div class="observer"><div class="observer-head"><span class="observer-name">Codex / Independent Audit</span><span class="status">not yet observed</span></div><textarea class="field observer-text" data-observer="Codex" placeholder="独立観測を記録…"></textarea></div>
+  </div>
+</section>
+<section class="card">
+  <div class="label">DIFFERENCE</div>
+  <textarea id="difference" class="field" placeholder="4者の観測を見た後、差分だけを記録する…"></textarea>
+  <div class="actions"><button onclick="deriveDifference()">観測差分を生成</button><button onclick="clearDifference()">差分を消去</button></div>
+</section>
+<section class="card">
+  <div class="label">NEXT SPACE</div>
+  <textarea id="nextSpace" class="field" placeholder="この観測によって、次の認識空間に何を持ち込むか…"></textarea>
+  <div class="label" style="margin-top:14px">HUMAN FIX</div>
+  <div class="decision"><button onclick="setDecision(this,'APPROVE')">APPROVE</button><button class="warn" onclick="setDecision(this,'HOLD')">HOLD</button><button onclick="setDecision(this,'REVISE')">REVISE</button></div>
+</section>
+<section class="card full">
+  <div class="label">DEVELOPMENT HISTORY</div>
+  <div class="history">
+    <div class="history-item"><b>001 — WU-1A</b><br>Claude = PASS-C / Codex = HOLD。</div>
+    <div class="history-item"><b>002 — Fact Check</b><br>Claude local JSONL の存在と詳細なブラウザ／テスト記録を確認。Codexは証拠の存在を確認したがHOLD継続。</div>
+    <div class="history-item"><b>003 — Recognition Space Hypothesis</b><br>同じ対象でも、証拠・文脈・状態・実行可能性によって観測可能性が変わる。</div>
+    <div class="history-item"><b>004 — Difference Hypothesis</b><br>AI間の差異をエラーではなく、次の観測のための資源として保存する。</div>
+    <div class="history-item"><b>005 — Evolution Hypothesis</b><br>判断結果を固定して終えるのではなく、次の認識空間へ戻す。</div>
+    <div class="history-item"><b>006 — Prototype 001</b><br>SOURCE / CONTEXT / STATE / OBSERVATION / DIFFERENCE / NEXT SPACE / HUMAN FIX を最小構成で実物化。</div>
+  </div>
+</section>
+<section class="card full">
+  <div class="label">LOCAL RECORD</div>
+  <p id="saveState">未保存</p>
+  <div class="actions"><button class="primary" onclick="save()">この観測を保存</button><button onclick="load()">保存記録を読み込む</button><button onclick="downloadJSON()">JSONを書き出す</button><button onclick="resetForm()">新しい観測</button></div>
+  <p class="foot">Prototype 001 is intentionally small. It does not call AI APIs. Independent observations are entered or imported externally so that the observation process remains explicit.</p>
+</section>
+</div>
+</main>
+<script>
+let decision='';
+const ids=['source','context','state','judgment','reason','evidence','unknown','difference','nextSpace'];
+function getData(){return {prototype:'AI Team Studio Evolution Prototype 001',timestamp:new Date().toISOString(),space:Object.fromEntries(ids.slice(0,3).map(id=>[id,document.getElementById(id).value])),observation:Object.fromEntries(ids.slice(3).map(id=>[id,document.getElementById(id).value])),observers:Object.fromEntries([...document.querySelectorAll('.observer-text')].map(x=>[x.dataset.observer,x.value])),human_fix:decision};}
+function save(){localStorage.setItem('atse-p001',JSON.stringify(getData(),null,2));document.getElementById('saveState').textContent='保存済み: '+new Date().toLocaleString();}
+function load(){const raw=localStorage.getItem('atse-p001');if(!raw){alert('保存記録はありません。');return} const d=JSON.parse(raw);['source','context','state'].forEach(id=>document.getElementById(id).value=d.space?.[id]||'');['judgment','reason','evidence','unknown','difference','nextSpace'].forEach(id=>document.getElementById(id).value=d.observation?.[id]||'');document.querySelectorAll('.observer-text').forEach(x=>x.value=d.observers?.[x.dataset.observer]||'');decision=d.human_fix||'';document.getElementById('saveState').textContent='読み込み済み: '+new Date().toLocaleString();}
+function downloadJSON(){const blob=new Blob([JSON.stringify(getData(),null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='observation-p001.json';a.click();URL.revokeObjectURL(a.href);}
+function resetForm(){if(confirm('現在の入力を消去しますか？')){ids.forEach(id=>document.getElementById(id).value='');document.querySelectorAll('.observer-text').forEach(x=>x.value='');decision='';document.getElementById('saveState').textContent='新しい観測';}}
+function setDecision(btn,v){decision=v;document.querySelectorAll('.decision button').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
+function clearDifference(){document.getElementById('difference').value='';}
+function deriveDifference(){const entries=[...document.querySelectorAll('.observer-text')].map(x=>`${x.dataset.observer}: ${x.value.trim()||'(未入力)'}`);document.getElementById('difference').value='Independent observations\n'+entries.join('\n')+'\n\n※これは差分の下書きです。最終的な差分判断は人間が行ってください。';}
+</script>
+</body></html>
