@@ -1,76 +1,257 @@
-# AI Team Studio Evolution — Prototype 001
+# AI Team Studio Evolution — Development History
 
 ## Purpose
 
-This prototype tests a hypothesis that AI Team Studio should be designed as a **recognition space**, not merely as an answer-collection interface.
+This project explores AI Team Studio as a **Recognition Space**, not merely an answer-collection interface.
 
-Core loop:
+The central principle is:
 
-**SPACE → OBSERVE → DIFFERENCE → SYNTHESIS → FIX → NEXT SPACE**
+> **Observation First. Understanding Together.**
 
-The prototype deliberately does not call AI APIs. The four observers remain independent, and their observations are entered or imported explicitly.
+The development history is preserved as part of the research object. Each stage records how the next recognition space emerged from the previous observation.
 
-## Development history
+---
 
-### 001 — WU-1A
-Claude reported PASS-C. Codex reported HOLD.
+# 000 — Origin
 
-### 002 — Fact Check
-The Claude local JSONL session record was confirmed to contain browser interaction, server command, local state/UI evidence, T1–T23 test records, console observations, and Git state. Codex confirmed the existence of this evidence but retained HOLD because it did not independently reproduce the browser run and did not complete a full formal requirement-to-assertion mapping.
+The project originated from the AI Team Studio v2 collaboration model in which GPT, Claude, Gemini, and Codex observe the same work from different responsibilities.
 
-### 003 — Recognition Space Hypothesis
-The important observation was not simply PASS versus HOLD. The same underlying target can yield different judgments when evidence, context, execution state, or observable scope differs.
+The initial concern was not simply whether an implementation was correct, but why two capable observers could reach different judgments from apparently related evidence.
 
-### 004 — Difference Hypothesis
-Differences between observers are treated as an observation resource rather than automatically as errors.
+This led to the question:
 
-### 005 — Evolution Hypothesis
-A fixed human decision becomes material for the next recognition space instead of being treated as the end of the process.
+> **Can the conditions under which an AI recognizes something be made observable?**
 
-### 006 — Prototype 001
-A minimal static prototype was created with:
+---
 
-- SOURCE
+# 001 — WU-1A
+
+Theme: **Save Safety / Active State Protection**
+
+WU-1A was implemented and tested with Claude reporting PASS-C while Codex maintained HOLD.
+
+The difference did not immediately establish that one observer was right and the other wrong. It exposed a need to inspect the evidence, execution conditions, requirements mapping, and observation state behind the judgments.
+
+The WU-1A implementation itself is not reproduced here; it is the historical origin of the Recognition Space hypothesis.
+
+---
+
+# 002 — Fact Check
+
+A fact-check phase examined the evidence behind the differing judgments.
+
+Claude's local session record contained detailed browser operations, server commands, T1–T23 test records, UI/state observations, console information, and Git state.
+
+Codex subsequently confirmed that the evidence record existed, but maintained HOLD because the available evidence had not yet been independently mapped across the full formal requirement set and runtime reproduction had not been performed.
+
+The important observation was:
+
+> **The evidence can exist while its accessibility and interpretation differ between observers.**
+
+---
+
+# 003 — Recognition Space Hypothesis
+
+The project shifted from asking:
+
+> “Which AI is correct?”
+
+toward:
+
+> **“What recognition space caused each AI to reach its judgment?”**
+
+The initial hypothesis was that SOURCE, CONTEXT, STATE, execution possibility, evidence, and observer position can affect what an AI is able to recognize.
+
+This introduced the conceptual loop:
+
+```text
+SPACE → OBSERVE → DIFFERENCE → SYNTHESIS → FIX → NEXT SPACE
+```
+
+---
+
+# 004 — Difference Hypothesis
+
+Difference was reframed.
+
+It should not automatically be treated as an error to eliminate.
+
+Instead:
+
+> **Meaningful differences between observers are observation resources.**
+
+A difference can reveal an unknown condition, an evidence boundary, a context difference, or a difference in reasoning.
+
+The question therefore becomes:
+
+> **Where did the difference originate?**
+
+---
+
+# 005 — Evolution Hypothesis
+
+The project then proposed that judgment should not simply terminate the process.
+
+A fixed judgment can become material for the next recognition space.
+
+Therefore:
+
+```text
+Observation
+    ↓
+Difference
+    ↓
+Synthesis
+    ↓
+Human Fix
+    ↓
+Next Space
+    ↓
+New Observation
+```
+
+The goal is not autonomous AI consensus.
+
+The goal is an observable evolution of recognition conditions.
+
+---
+
+# 006 — Prototype 001
+
+Prototype 001 was created as a deliberately small, static implementation.
+
+Its purpose was to make the Recognition Space physically observable before attempting automation.
+
+The prototype contains:
+
+- SPACE / SOURCE
 - CONTEXT
 - STATE
+- OBSERVATION PROTOCOL
 - JUDGMENT
 - REASON
 - EVIDENCE
 - UNKNOWN
-- four independent observer fields
+- four independent observer inputs
 - DIFFERENCE
 - NEXT SPACE
 - HUMAN FIX
-- local save/load
-- JSON export
+- DEVELOPMENT HISTORY
+- LOCAL RECORD
 
-## What this prototype is intended to test
+It intentionally does not call AI APIs.
 
-1. Can four AIs independently observe the same prototype without being forced into one answer?
-2. Can the differences between their observations be preserved explicitly?
-3. Does the distinction between judgment, evidence, unknowns, and observation conditions improve auditability?
-4. Does a human FIX provide a meaningful transition into the next recognition space?
-5. What should Prototype 002 contain after the four independent observations?
+Independent observations are entered externally so that the observation process remains explicit.
 
-## Non-goals
+**Implementation status:** Prototype 001 fixed and published.
 
-- This is not the replacement for AI Team Studio v2.
-- This is not an AI orchestration engine.
-- This prototype does not claim that the "recognition space" analogy is a physical or quantum-mechanical claim.
-- No external factual source is silently treated as source-of-truth.
+---
 
-## First experiment
+# 007 — Five-Observer Independent Observation
 
-Show the same repository and the same prototype to GPT, Claude, Gemini, and Codex independently.
+On 2026-10-07, Prototype 001 was independently observed by:
 
-Ask each to report:
+- Claude
+- Gemini
+- Codex
+- Meta AI / Muse Spark
+- GPT (independent report from a separate chat)
 
-- What can you observe?
-- What can you not observe?
-- What is unclear?
-- What is missing?
-- What should be changed?
-- What should be preserved?
-- What is your strongest recommendation for Prototype 002?
+The observers were instructed not to read one another's reports.
 
-Do not show one observer's report to another before their independent report is complete.
+All five returned **HOLD**, but their reasons and proposed next spaces differed.
+
+This was treated as an observation result rather than a failure.
+
+### Claude observed
+
+The importance of **observation conditions themselves**.
+
+### Gemini observed
+
+The importance of **transition, synthesis, and inheritance between recognition spaces**.
+
+### Codex observed
+
+The possibility of experimentally separating **SOURCE and CONTEXT**.
+
+### Meta AI observed
+
+The importance of **observability and evidence accessibility** as data.
+
+### GPT observed
+
+The need to identify the **origin layer of Difference**.
+
+---
+
+# 008 — SYNTHESIS
+
+The five independent observations were synthesized without averaging them into a single score.
+
+A common direction emerged:
+
+> **The next question is not simply whether observers disagree, but what conditions cause their recognitions to diverge.**
+
+The Recognition Space hypothesis was therefore refined from:
+
+> “A space for comparing AI observations.”
+
+toward:
+
+> **“A space for observing the conditions under which different intelligences recognize the same object differently, and preserving those differences as material for the next recognition space.”**
+
+The resulting next-space candidate is:
+
+# Difference Origin Space
+
+The proposed experiment is to observe whether differences originate in:
+
+- SOURCE
+- CONTEXT
+- STATE
+- OBSERVER
+- EVIDENCE
+- REASONING
+- JUDGMENT
+
+A particularly concrete experiment is to keep SOURCE fixed while varying CONTEXT.
+
+Observation conditions themselves may also need to become first-class data, including access route, available evidence, runtime environment, prior knowledge, observer role, observation time, and observable range.
+
+**Synthesis status:** fixed as the current development hypothesis.  
+**Prototype 002:** not yet implemented.
+
+For the complete synthesis record, see [`SYNTHESIS_REPORT.md`](SYNTHESIS_REPORT.md).
+
+---
+
+# Current State
+
+```text
+WU-1A
+  ↓
+Fact Check
+  ↓
+Recognition Space Hypothesis
+  ↓
+Difference Hypothesis
+  ↓
+Evolution Hypothesis
+  ↓
+Prototype 001
+  ↓
+Independent Observation
+  ↓
+Five Observer Reports
+  ↓
+SYNTHESIS
+  ↓
+Difference Origin Space
+  ↓
+Prototype 002 — future experiment
+```
+
+Prototype 001 remains preserved as the first fixed Recognition Space artifact.
+
+The next implementation should be based on the observed differences above, not on assumptions made before the independent observation.
