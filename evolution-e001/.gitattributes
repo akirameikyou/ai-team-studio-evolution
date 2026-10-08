@@ -1,0 +1,3 @@
+# Hashed documents and fixtures must keep their exact bytes on every checkout.
+docs/** -text
+tests/fixtures/*.json -text

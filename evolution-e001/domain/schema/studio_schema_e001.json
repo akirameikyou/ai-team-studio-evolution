@@ -1,0 +1,575 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:ai-team-studio:evolution-e001:studio-schema:1.0",
+  "title": "AI Team Studio Evolution — E001 Canonical Schema (based on Accepted Specification E002)",
+  "description": "Formal E001 schema. Defines one record type per canonical entity and a store bundle that groups records for reference-integrity checks. This is NOT the earlier reference schema in docs/reference/ (schemaVersion E001.0); that file is kept unmodified as reference material only. Validation scope: see docs/SCHEMA_VALIDATION_SCOPE.md.",
+  "$comment": "Only the keywords listed in docs/SCHEMA_VALIDATION_SCOPE.md may be used in this file; the E001 validator rejects any other keyword instead of ignoring it.",
+  "type": "object",
+  "required": ["schemaVersion", "bundleType", "records"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"$ref": "#/$defs/schemaVersion"},
+    "bundleType": {"enum": ["E001_STORE_BUNDLE", "E001_EXPORT"]},
+    "createdAt": {"$ref": "#/$defs/timestamp"},
+    "records": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "case": {"type": "array", "items": {"$ref": "#/$defs/case"}},
+        "designSpace": {"type": "array", "items": {"$ref": "#/$defs/designSpace"}},
+        "node": {"type": "array", "items": {"$ref": "#/$defs/node"}},
+        "provider": {"type": "array", "items": {"$ref": "#/$defs/provider"}},
+        "pattern": {"type": "array", "items": {"$ref": "#/$defs/pattern"}},
+        "route": {"type": "array", "items": {"$ref": "#/$defs/route"}},
+        "protocol": {"type": "array", "items": {"$ref": "#/$defs/protocol"}},
+        "trial": {"type": "array", "items": {"$ref": "#/$defs/trial"}},
+        "run": {"type": "array", "items": {"$ref": "#/$defs/run"}},
+        "runManifest": {"type": "array", "items": {"$ref": "#/$defs/runManifest"}},
+        "source": {"type": "array", "items": {"$ref": "#/$defs/source"}},
+        "artifact": {"type": "array", "items": {"$ref": "#/$defs/artifact"}},
+        "event": {"type": "array", "items": {"$ref": "#/$defs/event"}},
+        "transfer": {"type": "array", "items": {"$ref": "#/$defs/transfer"}},
+        "observation": {"type": "array", "items": {"$ref": "#/$defs/observation"}},
+        "synthesis": {"type": "array", "items": {"$ref": "#/$defs/synthesis"}},
+        "gate": {"type": "array", "items": {"$ref": "#/$defs/gate"}},
+        "evaluation": {"type": "array", "items": {"$ref": "#/$defs/evaluation"}}
+      }
+    }
+  },
+
+  "x-entities": {
+    "case":        {"def": "case",        "idField": "caseId",          "versioned": false},
+    "designSpace": {"def": "designSpace", "idField": "designSpaceId",   "versioned": false},
+    "node":        {"def": "node",        "idField": "nodeId",          "versioned": false},
+    "provider":    {"def": "provider",    "idField": "providerId",      "versioned": false},
+    "pattern":     {"def": "pattern",     "idField": "patternId",       "versioned": true},
+    "route":       {"def": "route",       "idField": "routeId",         "versioned": true},
+    "protocol":    {"def": "protocol",    "idField": "protocolId",      "versioned": true},
+    "trial":       {"def": "trial",       "idField": "trialId",         "versioned": false},
+    "run":         {"def": "run",         "idField": "runId",           "versioned": false},
+    "runManifest": {"def": "runManifest", "idField": "runManifestId",   "versioned": false},
+    "source":      {"def": "source",      "idField": "sourceId",        "versioned": false},
+    "artifact":    {"def": "artifact",    "idField": "artifactId",      "versioned": false},
+    "event":       {"def": "event",       "idField": "eventId",         "versioned": false},
+    "transfer":    {"def": "transfer",    "idField": "transferId",      "versioned": false},
+    "observation": {"def": "observation", "idField": "observationId",   "versioned": false},
+    "synthesis":   {"def": "synthesis",   "idField": "synthesisId",     "versioned": false},
+    "gate":        {"def": "gate",        "idField": "gateId",          "versioned": false},
+    "evaluation":  {"def": "evaluation",  "idField": "evaluationId",    "versioned": false}
+  },
+
+  "$defs": {
+    "schemaVersion": {"const": "E001/1.0", "description": "Canonical E001 schema version. Distinct from the reference schema's 'E001.0'."},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "hashAlgorithm": {"const": "SHA-256"},
+    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+$"},
+    "text": {"type": "string", "minLength": 1},
+
+    "caseId":        {"type": "string", "pattern": "^CASE-[A-Za-z0-9][A-Za-z0-9_-]{2,79}$"},
+    "designSpaceId": {"type": "string", "pattern": "^DS-[A-Za-z0-9][A-Za-z0-9_-]{2,79}$"},
+    "nodeId":        {"type": "string", "pattern": "^NODE-[A-Za-z0-9][A-Za-z0-9_-]{2,79}$"},
+    "providerId":    {"type": "string", "pattern": "^PROV-[A-Za-z0-9][A-Za-z0-9_-]{2,79}$"},
+    "patternId":     {"type": "string", "pattern": "^PAT-[A-Za-z0-9][A-Za-z0-9_-]{2,79}$"},
+    "routeId":       {"type": "string", "pattern": "^ROUTE-[A-Za-z0-9][A-Za-z0-9_-]{2,79}$"},
+    "protocolId":    {"type": "string", "pattern": "^PROTO-[A-Za-z0-9][A-Za-z0-9_-]{2,79}$"},
+    "trialId":       {"type": "string", "pattern": "^TRIAL-[A-Za-z0-9][A-Za-z0-9_-]{2,79}$"},
+    "runId":         {"type": "string", "pattern": "^RUN-[A-Za-z0-9][A-Za-z0-9_-]{2,79}$"},
+    "runManifestId": {"type": "string", "pattern": "^MAN-[A-Za-z0-9][A-Za-z0-9_-]{2,79}$"},
+    "sourceId":      {"type": "string", "pattern": "^SRC-[A-Za-z0-9][A-Za-z0-9_-]{2,79}$"},
+    "artifactId":    {"type": "string", "pattern": "^ART-[A-Za-z0-9][A-Za-z0-9_-]{2,79}$"},
+    "eventId":       {"type": "string", "pattern": "^EVT-[A-Za-z0-9][A-Za-z0-9_-]{2,79}$"},
+    "transferId":    {"type": "string", "pattern": "^XFER-[A-Za-z0-9][A-Za-z0-9_-]{2,79}$"},
+    "observationId": {"type": "string", "pattern": "^OBS-[A-Za-z0-9][A-Za-z0-9_-]{2,79}$"},
+    "synthesisId":   {"type": "string", "pattern": "^SYN-[A-Za-z0-9][A-Za-z0-9_-]{2,79}$"},
+    "gateId":        {"type": "string", "pattern": "^GATE-[A-Za-z0-9][A-Za-z0-9_-]{2,79}$"},
+    "evaluationId":  {"type": "string", "pattern": "^EVAL-[A-Za-z0-9][A-Za-z0-9_-]{2,79}$"},
+    "slotId":        {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"},
+    "edgeId":        {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"},
+    "ruleId":        {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,39}$"},
+
+    "role": {"enum": ["OBSERVER", "SYNTHESIZER", "GATE", "SOURCE", "EXECUTOR"], "description": "E002 §4.4. A Role is a position in an arrangement, never a Node.kind."},
+    "isolationAssurance": {"enum": ["ENFORCED", "PACKET_CONTROLLED", "DECLARED", "UNKNOWN"], "description": "E002 §16. Manual providers never carry ENFORCED (semantic rule SR-02)."},
+    "artifactKind": {"enum": ["CASE_INPUT", "SOURCE_CONTENT", "PACKET", "RAW_RESPONSE", "HUMAN_NOTE"]},
+    "providerKind": {"enum": ["MANUAL_CLIPBOARD", "MANUAL_FILE"], "description": "E002 §4.5 / §23: E001 minimum. API, PROXY, LOCAL_LLM, CODE_EXECUTOR are future and require a schema version change."},
+    "targetType": {"enum": ["case", "designSpace", "node", "provider", "pattern", "route", "protocol", "trial", "run", "runManifest", "source", "artifact", "event", "transfer", "observation", "synthesis", "gate", "evaluation"]},
+
+    "versionedRef": {
+      "type": "object",
+      "required": ["id", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string"},
+        "version": {"$ref": "#/$defs/version"}
+      }
+    },
+    "findingItem": {
+      "type": "object",
+      "required": ["text", "observationIds"],
+      "additionalProperties": false,
+      "description": "One synthesis finding. Every item names the observations it came from (E002 §18).",
+      "properties": {
+        "text": {"$ref": "#/$defs/text"},
+        "observationIds": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/observationId", "x-ref": "observation"}}
+      }
+    },
+
+    "case": {
+      "type": "object",
+      "description": "E002 §4.1. Status stays coarse; execution state belongs to Trial / Run / Event.",
+      "required": ["schemaVersion", "caseId", "question", "intent", "constraints", "createdAt", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {"$ref": "#/$defs/schemaVersion"},
+        "caseId": {"$ref": "#/$defs/caseId"},
+        "question": {"$ref": "#/$defs/text"},
+        "intent": {"type": "string"},
+        "constraints": {"type": "array", "items": {"type": "string"}},
+        "createdAt": {"$ref": "#/$defs/timestamp"},
+        "status": {"enum": ["OPEN", "PAUSED", "CLOSED"]}
+      }
+    },
+
+    "designSpace": {
+      "type": "object",
+      "description": "E002 §4.2. Minimal; no optimization fields in E001.",
+      "required": ["schemaVersion", "designSpaceId", "caseId", "objective", "constraints", "notes", "createdAt"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {"$ref": "#/$defs/schemaVersion"},
+        "designSpaceId": {"$ref": "#/$defs/designSpaceId"},
+        "caseId": {"$ref": "#/$defs/caseId", "x-ref": "case"},
+        "objective": {"$ref": "#/$defs/text"},
+        "constraints": {"type": "array", "items": {"type": "string"}},
+        "notes": {"type": "string"},
+        "createdAt": {"$ref": "#/$defs/timestamp"}
+      }
+    },
+
+    "node": {
+      "type": "object",
+      "description": "E002 §4.3. Who or what participates. Identity is nodeId, never displayName.",
+      "required": ["schemaVersion", "nodeId", "kind", "displayName", "createdAt"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {"$ref": "#/$defs/schemaVersion"},
+        "nodeId": {"$ref": "#/$defs/nodeId"},
+        "kind": {"enum": ["HUMAN", "MODEL", "TOOL", "RESOURCE", "SYSTEM"]},
+        "displayName": {"$ref": "#/$defs/text"},
+        "description": {"type": "string"},
+        "createdAt": {"$ref": "#/$defs/timestamp"}
+      }
+    },
+
+    "provider": {
+      "type": "object",
+      "description": "E002 §4.5 / §23. Execution/transport adapter boundary. maxIsolationAssurance is what this provider can honestly claim.",
+      "required": ["schemaVersion", "providerId", "kind", "maxIsolationAssurance", "createdAt"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {"$ref": "#/$defs/schemaVersion"},
+        "providerId": {"$ref": "#/$defs/providerId"},
+        "kind": {"$ref": "#/$defs/providerKind"},
+        "maxIsolationAssurance": {"$ref": "#/$defs/isolationAssurance"},
+        "description": {"type": "string"},
+        "createdAt": {"$ref": "#/$defs/timestamp"}
+      }
+    },
+
+    "pattern": {
+      "type": "object",
+      "description": "E002 §5. Reusable arrangement template. Holds slots (roles), never concrete nodes. Identity = (patternId, version); a version is immutable.",
+      "required": ["schemaVersion", "patternId", "version", "name", "topology", "slots"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {"$ref": "#/$defs/schemaVersion"},
+        "patternId": {"$ref": "#/$defs/patternId"},
+        "version": {"$ref": "#/$defs/version"},
+        "name": {"$ref": "#/$defs/text"},
+        "topology": {"enum": ["PARALLEL", "SEQUENTIAL"]},
+        "description": {"type": "string"},
+        "slots": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["slotId", "role"],
+            "additionalProperties": false,
+            "properties": {
+              "slotId": {"$ref": "#/$defs/slotId"},
+              "role": {"$ref": "#/$defs/role"},
+              "order": {"type": "integer", "minimum": 1}
+            }
+          }
+        }
+      }
+    },
+
+    "route": {
+      "type": "object",
+      "description": "E002 §6. Concrete intended information-flow graph for a Run. Binds pattern slots to nodes; edges use concrete node IDs. Actual movement is a Transfer, never a Route edge.",
+      "required": ["schemaVersion", "routeId", "version", "patternRef", "protocolRef", "slotBindings", "edges"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {"$ref": "#/$defs/schemaVersion"},
+        "routeId": {"$ref": "#/$defs/routeId"},
+        "version": {"$ref": "#/$defs/version"},
+        "patternRef": {"$ref": "#/$defs/versionedRef", "x-ref-versioned": "pattern"},
+        "protocolRef": {"$ref": "#/$defs/versionedRef", "x-ref-versioned": "protocol"},
+        "slotBindings": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["slotId", "nodeId", "providerId"],
+            "additionalProperties": false,
+            "properties": {
+              "slotId": {"$ref": "#/$defs/slotId"},
+              "nodeId": {"$ref": "#/$defs/nodeId", "x-ref": "node"},
+              "providerId": {"$ref": "#/$defs/providerId", "x-ref": "provider"}
+            }
+          }
+        },
+        "edges": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["edgeId", "fromNodeId", "toNodeId", "allowedArtifactKinds", "order"],
+            "additionalProperties": false,
+            "properties": {
+              "edgeId": {"$ref": "#/$defs/edgeId"},
+              "fromNodeId": {"$ref": "#/$defs/nodeId", "x-ref": "node"},
+              "toNodeId": {"$ref": "#/$defs/nodeId", "x-ref": "node"},
+              "allowedArtifactKinds": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/artifactKind"}},
+              "order": {"type": "integer", "minimum": 1}
+            }
+          }
+        }
+      }
+    },
+
+    "protocol": {
+      "type": "object",
+      "description": "E002 §14. Structured, deterministic rules. Default effect is always DENY; conflicts resolve by DENY_OVERRIDES. Identity = (protocolId, version).",
+      "required": ["schemaVersion", "protocolId", "version", "defaultEffect", "conflictResolution", "violationAction", "rules"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {"$ref": "#/$defs/schemaVersion"},
+        "protocolId": {"$ref": "#/$defs/protocolId"},
+        "version": {"$ref": "#/$defs/version"},
+        "description": {"type": "string"},
+        "defaultEffect": {"const": "DENY"},
+        "conflictResolution": {"const": "DENY_OVERRIDES"},
+        "violationAction": {"enum": ["BLOCK", "PAUSE"]},
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["ruleId", "subject", "action", "object", "effect", "condition"],
+            "additionalProperties": false,
+            "properties": {
+              "ruleId": {"$ref": "#/$defs/ruleId"},
+              "subject": {
+                "type": "object",
+                "required": ["type"],
+                "additionalProperties": false,
+                "description": "Who the rule applies to. ROLE uses the role name; NODE uses a nodeId; ANY matches every node.",
+                "properties": {
+                  "type": {"enum": ["ROLE", "NODE", "ANY"]},
+                  "value": {"type": "string"}
+                }
+              },
+              "action": {"enum": ["RECEIVE", "SUBMIT"], "description": "RECEIVE = an artifact may be placed in the subject's packet. SUBMIT = the subject may deliver an artifact of this kind."},
+              "object": {
+                "type": "object",
+                "required": ["artifactKinds", "producerRelation"],
+                "additionalProperties": false,
+                "description": "Which artifacts. producerRelation is relative to the subject node within the Run.",
+                "properties": {
+                  "artifactKinds": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/artifactKind"}},
+                  "producerRelation": {"enum": ["ANY", "NONE", "SELF", "ROUTE_PREDECESSOR", "PEER"], "description": "NONE = case-level artifacts without a producing node (case input, sources). PEER = produced by another node in the same Run that is not a route predecessor."}
+                }
+              },
+              "effect": {"enum": ["ALLOW", "DENY"]},
+              "condition": {"enum": ["ALWAYS", "ROUTE_EDGE_EXISTS"], "description": "Closed list; no free-text expressions are evaluated."}
+            }
+          }
+        }
+      }
+    },
+
+    "trial": {
+      "type": "object",
+      "description": "E002 §7. An intentional change in experimental conditions, not a retry.",
+      "required": ["schemaVersion", "trialId", "caseId", "designSpaceId", "hypothesis", "patternRef", "routeRef", "protocolRef", "appliedExperienceIds", "previousTrialId", "budget", "createdAt", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {"$ref": "#/$defs/schemaVersion"},
+        "trialId": {"$ref": "#/$defs/trialId"},
+        "caseId": {"$ref": "#/$defs/caseId", "x-ref": "case"},
+        "designSpaceId": {"$ref": "#/$defs/designSpaceId", "x-ref": "designSpace"},
+        "hypothesis": {"$ref": "#/$defs/text"},
+        "rationale": {"type": "string"},
+        "patternRef": {"$ref": "#/$defs/versionedRef", "x-ref-versioned": "pattern"},
+        "routeRef": {"$ref": "#/$defs/versionedRef", "x-ref-versioned": "route"},
+        "protocolRef": {"$ref": "#/$defs/versionedRef", "x-ref-versioned": "protocol"},
+        "appliedExperienceIds": {"type": "array", "maxItems": 0, "items": {"type": "string"}, "description": "E002 §7/§21: no Experience entity exists in E001, so this must stay empty."},
+        "previousTrialId": {"type": ["string", "null"], "pattern": "^TRIAL-[A-Za-z0-9][A-Za-z0-9_-]{2,79}$", "x-ref": "trial"},
+        "budget": {
+          "type": "object",
+          "required": ["maxRuns"],
+          "additionalProperties": false,
+          "properties": {"maxRuns": {"type": "integer", "minimum": 1}}
+        },
+        "createdAt": {"$ref": "#/$defs/timestamp"},
+        "status": {"enum": ["PLANNED", "ACTIVE", "CLOSED"]}
+      }
+    },
+
+    "run": {
+      "type": "object",
+      "description": "E002 §8. One execution of a Trial. A retry is a new Run (retryOfRunId).",
+      "required": ["schemaVersion", "runId", "trialId", "runManifestId", "startedAt", "completedAt", "status", "retryOfRunId"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {"$ref": "#/$defs/schemaVersion"},
+        "runId": {"$ref": "#/$defs/runId"},
+        "trialId": {"$ref": "#/$defs/trialId", "x-ref": "trial"},
+        "runManifestId": {"$ref": "#/$defs/runManifestId", "x-ref": "runManifest"},
+        "startedAt": {"$ref": "#/$defs/timestamp"},
+        "completedAt": {"type": ["string", "null"], "format": "date-time"},
+        "status": {"enum": ["RUNNING", "PAUSED", "COMPLETED", "FAILED", "CANCELLED"]},
+        "retryOfRunId": {"type": ["string", "null"], "pattern": "^RUN-[A-Za-z0-9][A-Za-z0-9_-]{2,79}$", "x-ref": "run"}
+      }
+    },
+
+    "runManifest": {
+      "type": "object",
+      "description": "E002 §9. Frozen conditions of one Run. Versioned entities are referenced by (id, version); nodes and providers are embedded as frozen copies because they are not versioned.",
+      "required": ["schemaVersion", "runManifestId", "runId", "frozenAt", "caseId", "trialId", "patternRef", "routeRef", "protocolRef", "nodes", "roleAssignments", "providers", "sources", "initialArtifactIds", "configuration"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {"$ref": "#/$defs/schemaVersion"},
+        "runManifestId": {"$ref": "#/$defs/runManifestId"},
+        "runId": {"$ref": "#/$defs/runId", "x-ref": "run"},
+        "frozenAt": {"$ref": "#/$defs/timestamp"},
+        "caseId": {"$ref": "#/$defs/caseId", "x-ref": "case"},
+        "trialId": {"$ref": "#/$defs/trialId", "x-ref": "trial"},
+        "patternRef": {"$ref": "#/$defs/versionedRef", "x-ref-versioned": "pattern"},
+        "routeRef": {"$ref": "#/$defs/versionedRef", "x-ref-versioned": "route"},
+        "protocolRef": {"$ref": "#/$defs/versionedRef", "x-ref-versioned": "protocol"},
+        "nodes": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/node"}},
+        "roleAssignments": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["slotId", "role", "nodeId", "providerId"],
+            "additionalProperties": false,
+            "properties": {
+              "slotId": {"$ref": "#/$defs/slotId"},
+              "role": {"$ref": "#/$defs/role"},
+              "nodeId": {"$ref": "#/$defs/nodeId", "x-ref": "node"},
+              "providerId": {"$ref": "#/$defs/providerId", "x-ref": "provider"}
+            }
+          }
+        },
+        "providers": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/provider"}},
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["sourceId", "verificationStatus", "verifiedHash", "claimedHash"],
+            "additionalProperties": false,
+            "properties": {
+              "sourceId": {"$ref": "#/$defs/sourceId", "x-ref": "source"},
+              "verificationStatus": {"enum": ["VERIFIED", "CLAIMED_ONLY", "MISMATCH", "UNVERIFIED", "UNKNOWN"]},
+              "verifiedHash": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+              "claimedHash": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
+            }
+          }
+        },
+        "initialArtifactIds": {"type": "array", "items": {"$ref": "#/$defs/artifactId", "x-ref": "artifact"}},
+        "configuration": {"type": "object"}
+      }
+    },
+
+    "source": {
+      "type": "object",
+      "description": "E002 §10. An unverified source is never silently converted to verified (semantic rule SR-03).",
+      "required": ["schemaVersion", "sourceId", "caseId", "kind", "reference", "claimedHash", "verifiedHash", "hashAlgorithm", "accessClassification", "verificationStatus", "createdAt"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {"$ref": "#/$defs/schemaVersion"},
+        "sourceId": {"$ref": "#/$defs/sourceId"},
+        "caseId": {"$ref": "#/$defs/caseId", "x-ref": "case"},
+        "kind": {"enum": ["URL", "FILE", "TEXT"]},
+        "reference": {"$ref": "#/$defs/text"},
+        "contentArtifactId": {"type": ["string", "null"], "pattern": "^ART-[A-Za-z0-9][A-Za-z0-9_-]{2,79}$", "x-ref": "artifact"},
+        "claimedHash": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "verifiedHash": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "hashAlgorithm": {"$ref": "#/$defs/hashAlgorithm"},
+        "accessClassification": {"enum": ["PUBLIC", "RESTRICTED", "UNKNOWN"], "description": "Interpretation recorded in docs/TRACEABILITY.md (D-07): who may see this material, not whether an AI could read it."},
+        "verificationStatus": {"enum": ["VERIFIED", "CLAIMED_ONLY", "MISMATCH", "UNVERIFIED", "UNKNOWN"]},
+        "createdAt": {"$ref": "#/$defs/timestamp"}
+      }
+    },
+
+    "artifact": {
+      "type": "object",
+      "description": "E002 §11. Immutable evidence unit. contentHash is SHA-256 of the exact stored bytes, no normalization. Exactly one of content / contentLocation (semantic rule SR-04).",
+      "required": ["schemaVersion", "artifactId", "kind", "encoding", "byteSize", "contentHash", "hashAlgorithm", "createdAt", "provenance", "producerNodeId", "parentArtifactIds"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {"$ref": "#/$defs/schemaVersion"},
+        "artifactId": {"$ref": "#/$defs/artifactId"},
+        "kind": {"$ref": "#/$defs/artifactKind"},
+        "content": {"type": "string", "description": "Inline content. Bytes = UTF-8 encoding of this string."},
+        "contentLocation": {"type": "string", "pattern": "^[A-Za-z0-9_./-]+$", "description": "Store-relative path of immutable content bytes."},
+        "encoding": {"const": "utf-8"},
+        "byteSize": {"type": "integer", "minimum": 0},
+        "contentHash": {"$ref": "#/$defs/sha256"},
+        "hashAlgorithm": {"$ref": "#/$defs/hashAlgorithm"},
+        "createdAt": {"$ref": "#/$defs/timestamp"},
+        "provenance": {
+          "type": "object",
+          "required": ["sourceKind", "receivedVia", "caseId", "runId", "transferId"],
+          "additionalProperties": false,
+          "properties": {
+            "sourceKind": {"enum": ["USER", "AI", "SYSTEM", "IMPORT"]},
+            "receivedVia": {"enum": ["MANUAL_PASTE", "MANUAL_FILE", "SYSTEM_GENERATED", "IMPORT"]},
+            "caseId": {"$ref": "#/$defs/caseId", "x-ref": "case"},
+            "runId": {"type": ["string", "null"], "pattern": "^RUN-[A-Za-z0-9][A-Za-z0-9_-]{2,79}$", "x-ref": "run"},
+            "transferId": {"type": ["string", "null"], "pattern": "^XFER-[A-Za-z0-9][A-Za-z0-9_-]{2,79}$", "x-ref": "transfer"}
+          }
+        },
+        "producerNodeId": {"type": ["string", "null"], "pattern": "^NODE-[A-Za-z0-9][A-Za-z0-9_-]{2,79}$", "x-ref": "node"},
+        "parentArtifactIds": {"type": "array", "items": {"$ref": "#/$defs/artifactId", "x-ref": "artifact"}}
+      }
+    },
+
+    "event": {
+      "type": "object",
+      "description": "E002 §12. Append-only audit log entry. sequence is strictly increasing within a store (semantic rule SR-08).",
+      "required": ["schemaVersion", "eventId", "sequence", "timestamp", "actorNodeId", "eventType", "targetType", "targetId", "payload", "artifactRefs"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {"$ref": "#/$defs/schemaVersion"},
+        "eventId": {"$ref": "#/$defs/eventId"},
+        "sequence": {"type": "integer", "minimum": 1},
+        "timestamp": {"$ref": "#/$defs/timestamp"},
+        "actorNodeId": {"$ref": "#/$defs/nodeId", "x-ref": "node"},
+        "eventType": {"enum": ["CASE_CREATED", "TRIAL_CREATED", "RUN_STARTED", "PACKET_ASSEMBLED", "TRANSFER_CREATED", "ARTIFACT_RECEIVED", "OBSERVATION_CREATED", "SYNTHESIS_CREATED", "EVALUATION_CREATED", "GATE_DECIDED", "RUN_COMPLETED", "RUN_FAILED", "PROTOCOL_VIOLATION", "SOURCE_REGISTERED"]},
+        "targetType": {"$ref": "#/$defs/targetType"},
+        "targetId": {"type": "string", "minLength": 1},
+        "payload": {"type": "object"},
+        "artifactRefs": {"type": "array", "items": {"$ref": "#/$defs/artifactId", "x-ref": "artifact"}}
+      }
+    },
+
+    "transfer": {
+      "type": "object",
+      "description": "E002 §13. What actually moved. Studio-side packet generation and the human's external action are recorded separately; unverifiable external action stays UNKNOWN.",
+      "required": ["schemaVersion", "transferId", "runId", "edgeId", "fromNodeId", "toNodeId", "artifactIds", "packetArtifactId", "packetHash", "method", "createdAt", "status", "externalDelivery", "isolationAssurance"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {"$ref": "#/$defs/schemaVersion"},
+        "transferId": {"$ref": "#/$defs/transferId"},
+        "runId": {"$ref": "#/$defs/runId", "x-ref": "run"},
+        "edgeId": {"$ref": "#/$defs/edgeId"},
+        "fromNodeId": {"$ref": "#/$defs/nodeId", "x-ref": "node"},
+        "toNodeId": {"$ref": "#/$defs/nodeId", "x-ref": "node"},
+        "artifactIds": {"type": "array", "items": {"$ref": "#/$defs/artifactId", "x-ref": "artifact"}, "description": "Artifacts whose content was placed in the packet."},
+        "packetArtifactId": {"$ref": "#/$defs/artifactId", "x-ref": "artifact"},
+        "packetHash": {"$ref": "#/$defs/sha256"},
+        "method": {"$ref": "#/$defs/providerKind"},
+        "createdAt": {"$ref": "#/$defs/timestamp"},
+        "status": {"enum": ["PACKET_ASSEMBLED", "HANDED_TO_HUMAN", "RESPONSE_RECEIVED", "FAILED", "CANCELLED", "TIMED_OUT", "UNKNOWN"]},
+        "externalDelivery": {"enum": ["UNKNOWN", "HUMAN_REPORTED"], "description": "Whether the packet actually reached the external AI. The Studio cannot verify this for manual providers."},
+        "isolationAssurance": {"$ref": "#/$defs/isolationAssurance"}
+      }
+    },
+
+    "observation": {
+      "type": "object",
+      "description": "E002 §17. Derived record; never mutates its RAW artifact.",
+      "required": ["schemaVersion", "observationId", "runId", "transferId", "observerNodeId", "providerId", "inputArtifactIds", "rawResponseArtifactId", "parseStatus", "fields", "createdAt"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {"$ref": "#/$defs/schemaVersion"},
+        "observationId": {"$ref": "#/$defs/observationId"},
+        "runId": {"$ref": "#/$defs/runId", "x-ref": "run"},
+        "transferId": {"$ref": "#/$defs/transferId", "x-ref": "transfer"},
+        "observerNodeId": {"$ref": "#/$defs/nodeId", "x-ref": "node"},
+        "providerId": {"$ref": "#/$defs/providerId", "x-ref": "provider"},
+        "inputArtifactIds": {"type": "array", "items": {"$ref": "#/$defs/artifactId", "x-ref": "artifact"}},
+        "rawResponseArtifactId": {"$ref": "#/$defs/artifactId", "x-ref": "artifact"},
+        "parseStatus": {"enum": ["PARSED", "PARTIAL", "UNPARSED"]},
+        "fields": {"type": "object", "description": "Structured fields extracted by the deterministic parser. Empty when UNPARSED."},
+        "createdAt": {"$ref": "#/$defs/timestamp"}
+      }
+    },
+
+    "synthesis": {
+      "type": "object",
+      "description": "E002 §18. Combines permitted observations. No majority / truth field exists (additionalProperties false).",
+      "required": ["schemaVersion", "synthesisId", "runId", "synthesizerNodeId", "inputObservationIds", "rawResponseArtifactId", "common", "differences", "unknowns", "contradictions", "executionNeeds", "nextQuestions", "createdAt"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {"$ref": "#/$defs/schemaVersion"},
+        "synthesisId": {"$ref": "#/$defs/synthesisId"},
+        "runId": {"$ref": "#/$defs/runId", "x-ref": "run"},
+        "synthesizerNodeId": {"$ref": "#/$defs/nodeId", "x-ref": "node"},
+        "inputObservationIds": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/observationId", "x-ref": "observation"}},
+        "rawResponseArtifactId": {"type": ["string", "null"], "pattern": "^ART-[A-Za-z0-9][A-Za-z0-9_-]{2,79}$", "x-ref": "artifact"},
+        "common": {"type": "array", "items": {"$ref": "#/$defs/findingItem"}},
+        "differences": {"type": "array", "items": {"$ref": "#/$defs/findingItem"}},
+        "unknowns": {"type": "array", "items": {"$ref": "#/$defs/findingItem"}},
+        "contradictions": {"type": "array", "items": {"$ref": "#/$defs/findingItem"}},
+        "executionNeeds": {"type": "array", "items": {"$ref": "#/$defs/findingItem"}},
+        "nextQuestions": {"type": "array", "items": {"$ref": "#/$defs/findingItem"}},
+        "createdAt": {"$ref": "#/$defs/timestamp"}
+      }
+    },
+
+    "gate": {
+      "type": "object",
+      "description": "E002 §20. An approval record bound to one concrete target; not a reusable authorization token.",
+      "required": ["schemaVersion", "gateId", "targetType", "targetId", "targetContentHash", "actionClass", "proposedScope", "status", "decidedBy", "decidedAt", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {"$ref": "#/$defs/schemaVersion"},
+        "gateId": {"$ref": "#/$defs/gateId"},
+        "targetType": {"$ref": "#/$defs/targetType"},
+        "targetId": {"type": "string", "minLength": 1},
+        "targetContentHash": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$", "description": "Hash of the target as decided on, when the target has content. Binds the decision to that exact content."},
+        "actionClass": {"enum": ["A0", "A1", "A2", "A3", "A4", "A5", "DECISION"], "description": "A0-A5 per earlier action classes; DECISION for judgment gates (e.g. synthesis acceptance). E001 executes no consequential action."},
+        "proposedScope": {"$ref": "#/$defs/text"},
+        "status": {"enum": ["APPROVED", "REJECTED", "HOLD", "RETURNED"]},
+        "decidedBy": {"$ref": "#/$defs/nodeId", "x-ref": "node"},
+        "decidedAt": {"$ref": "#/$defs/timestamp"},
+        "reason": {"type": "string"}
+      }
+    },
+
+    "evaluation": {
+      "type": "object",
+      "description": "E002 §19 (SHOULD). E001 defines only L1, system-verifiable evaluation. AI self-report is never an L1 evaluator.",
+      "required": ["schemaVersion", "evaluationId", "targetType", "targetId", "level", "criterion", "status", "evaluatorNodeId", "evidence", "createdAt"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {"$ref": "#/$defs/schemaVersion"},
+        "evaluationId": {"$ref": "#/$defs/evaluationId"},
+        "targetType": {"$ref": "#/$defs/targetType"},
+        "targetId": {"type": "string", "minLength": 1},
+        "level": {"const": "L1"},
+        "criterion": {"enum": ["SCHEMA_VALID", "HASH_MATCH", "ARTIFACT_EXISTS", "REFERENCE_VALID", "PROTOCOL_VIOLATION", "REQUIRED_FIELD", "STATE_TRANSITION"]},
+        "status": {"enum": ["PASS", "FAIL", "UNKNOWN"]},
+        "evaluatorNodeId": {"$ref": "#/$defs/nodeId", "x-ref": "node"},
+        "evidence": {"type": "string"},
+        "createdAt": {"$ref": "#/$defs/timestamp"}
+      }
+    }
+  }
+}

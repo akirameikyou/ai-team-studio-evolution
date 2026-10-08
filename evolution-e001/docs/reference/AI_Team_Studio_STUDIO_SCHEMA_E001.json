@@ -1,0 +1,314 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-team-studio.local/schema/evolution-001.json",
+  "title": "AI Team Studio Evolution 001",
+  "type": "object",
+  "required": ["schemaVersion", "studio", "case", "designSpace", "nodes", "patterns", "routes", "protocols", "runs", "artifacts"],
+  "properties": {
+    "schemaVersion": {"type": "string", "const": "E001.0"},
+    "studio": {
+      "type": "object",
+      "required": ["studioId", "name", "createdAt"],
+      "properties": {
+        "studioId": {"type": "string"},
+        "name": {"type": "string"},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "mode": {"enum": ["MANUAL", "HYBRID", "AUTOMATED"]}
+      },
+      "additionalProperties": false
+    },
+    "case": {
+      "type": "object",
+      "required": ["caseId", "question", "status", "createdAt"],
+      "properties": {
+        "caseId": {"type": "string"},
+        "question": {"type": "string"},
+        "intent": {"type": "string"},
+        "desiredOutcome": {"type": "string"},
+        "constraints": {"type": "array", "items": {"type": "string"}},
+        "status": {"enum": ["CREATED","UNDERSTANDING","DESIGNING","READY","RUNNING","OBSERVING","SYNTHESIZING","GATED","ACTING","VERIFYING","REFLECTING","COMPLETED","PAUSED","FAILED"]},
+        "sourceIds": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": true
+    },
+    "designSpace": {
+      "type": "object",
+      "required": ["designSpaceId", "candidatePatternIds"],
+      "properties": {
+        "designSpaceId": {"type": "string"},
+        "userIntent": {"type": "string"},
+        "candidatePatternIds": {"type": "array", "items": {"type": "string"}},
+        "selectedPatternId": {"type": ["string", "null"]},
+        "selectionReason": {"type": ["string", "null"]},
+        "riskLevel": {"enum": ["LOW","MEDIUM","HIGH","CRITICAL"]},
+        "costPreference": {"enum": ["MIN","BALANCED","QUALITY"]},
+        "latencyPreference": {"enum": ["MIN","BALANCED","QUALITY"]}
+      },
+      "additionalProperties": true
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/node"
+      }
+    },
+    "patterns": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/pattern"
+      }
+    },
+    "routes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/route"
+      }
+    },
+    "protocols": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/protocol"
+      }
+    },
+    "runs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/run"
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/artifact"
+      }
+    },
+    "observations": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/observation"}
+    },
+    "syntheses": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/synthesis"}
+    },
+    "evaluations": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/evaluation"}
+    },
+    "reflections": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/reflection"}
+    },
+    "experiences": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/experience"}
+    },
+    "gates": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/gate"}
+    }
+  },
+  "$defs": {
+    "node": {
+      "type": "object",
+      "required": ["nodeId", "type", "displayName", "enabled"],
+      "properties": {
+        "nodeId": {"type": "string"},
+        "type": {"enum": ["HUMAN","MODEL","TOOL","SOURCE","FILE","URL","DATASET","EXECUTOR","OBSERVER","SYNTHESIZER","GATE","MEMORY","SYSTEM"]},
+        "displayName": {"type": "string"},
+        "provider": {"type": ["string","null"]},
+        "capabilities": {"type": "array", "items": {"type": "string"}},
+        "contextPolicy": {"type": "string"},
+        "permissionPolicy": {"type": "string"},
+        "inputContract": {"type": ["object","null"]},
+        "outputContract": {"type": ["object","null"]},
+        "executionMode": {"enum": ["MANUAL","FILE","API","LOCAL","HUMAN"]},
+        "trustLevel": {"enum": ["UNTRUSTED","NORMAL","VERIFIED"]},
+        "enabled": {"type": "boolean"}
+      },
+      "additionalProperties": true
+    },
+    "pattern": {
+      "type": "object",
+      "required": ["patternId", "name", "version", "topology"],
+      "properties": {
+        "patternId": {"type": "string"},
+        "name": {"type": "string"},
+        "version": {"type": "string"},
+        "description": {"type": "string"},
+        "topology": {"enum": ["PARALLEL","SEQUENTIAL","SPECIALIST","DEBATE","EVALUATOR_OPTIMIZER","HUMAN_GATE","HYBRID"]},
+        "nodeIds": {"type": "array", "items": {"type": "string"}},
+        "routeId": {"type": "string"},
+        "protocolId": {"type": "string"},
+        "selectionRationale": {"type": ["string","null"]}
+      },
+      "additionalProperties": true
+    },
+    "route": {
+      "type": "object",
+      "required": ["routeId", "version", "edges"],
+      "properties": {
+        "routeId": {"type": "string"},
+        "version": {"type": "string"},
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["edgeId", "from", "to", "visibility"],
+            "properties": {
+              "edgeId": {"type": "string"},
+              "from": {"type": "string"},
+              "to": {"type": "string"},
+              "visibility": {"enum": ["CASE_PUBLIC","SOURCE_ONLY","NODE_PRIVATE","PATTERN_SHARED","SYNTHESIS_INPUT","HUMAN_ONLY","SYSTEM_ONLY"]},
+              "allowedArtifactTypes": {"type": "array", "items": {"type": "string"}},
+              "condition": {"type": ["string","null"]},
+              "retryLimit": {"type": "integer", "minimum": 0, "maximum": 10}
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "protocol": {
+      "type": "object",
+      "required": ["protocolId", "version", "defaultPolicy"],
+      "properties": {
+        "protocolId": {"type": "string"},
+        "version": {"type": "string"},
+        "defaultPolicy": {"enum": ["DENY","ALLOW"]},
+        "rules": {"type": "array", "items": {"type": "object"}},
+        "violationAction": {"enum": ["LOG","BLOCK","PAUSE","HUMAN_GATE"]}
+      },
+      "additionalProperties": true
+    },
+    "run": {
+      "type": "object",
+      "required": ["runId", "caseId", "patternId", "routeId", "protocolId", "startedAt", "status"],
+      "properties": {
+        "runId": {"type": "string"},
+        "caseId": {"type": "string"},
+        "trialId": {"type": ["string","null"]},
+        "patternId": {"type": "string"},
+        "routeId": {"type": "string"},
+        "protocolId": {"type": "string"},
+        "sourceManifestHashes": {"type": "array", "items": {"type": "string"}},
+        "nodeVersions": {"type": "object"},
+        "providerVersions": {"type": "object"},
+        "executionMode": {"enum": ["MANUAL","HYBRID","AUTOMATED"]},
+        "startedAt": {"type": "string", "format": "date-time"},
+        "endedAt": {"type": ["string","null"], "format": "date-time"},
+        "status": {"enum": ["PLANNED","RUNNING","PAUSED","WAITING_HUMAN","COMPLETED","FAILED","CANCELLED"]},
+        "approvalIds": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": true
+    },
+    "artifact": {
+      "type": "object",
+      "required": ["artifactId", "runId", "type", "contentHash", "createdAt"],
+      "properties": {
+        "artifactId": {"type": "string"},
+        "runId": {"type": "string"},
+        "nodeId": {"type": ["string","null"]},
+        "type": {"type": "string"},
+        "contentLocation": {"type": "string"},
+        "contentHash": {"type": "string"},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "parentArtifactIds": {"type": "array", "items": {"type": "string"}},
+        "sourceKind": {"enum": ["USER","AI","SYSTEM","IMPORT","TOOL"]}
+      },
+      "additionalProperties": true
+    },
+    "observation": {
+      "type": "object",
+      "required": ["observationId", "runId", "observerNodeId", "artifactIds", "status"],
+      "properties": {
+        "observationId": {"type": "string"},
+        "runId": {"type": "string"},
+        "observerNodeId": {"type": "string"},
+        "artifactIds": {"type": "array", "items": {"type": "string"}},
+        "claims": {"type": "array", "items": {"type": "object"}},
+        "evidenceRefs": {"type": "array", "items": {"type": "string"}},
+        "uncertainty": {"type": "array", "items": {"type": "object"}},
+        "contradictions": {"type": "array", "items": {"type": "object"}},
+        "status": {"enum": ["RAW","PARSED","REVIEWED"]}
+      },
+      "additionalProperties": true
+    },
+    "synthesis": {
+      "type": "object",
+      "required": ["synthesisId", "runId", "observationIds"],
+      "properties": {
+        "synthesisId": {"type": "string"},
+        "runId": {"type": "string"},
+        "observationIds": {"type": "array", "items": {"type": "string"}},
+        "common": {"type": "array", "items": {"type": "object"}},
+        "differences": {"type": "array", "items": {"type": "object"}},
+        "uniqueInsights": {"type": "array", "items": {"type": "object"}},
+        "unknown": {"type": "array", "items": {"type": "object"}},
+        "contradictions": {"type": "array", "items": {"type": "object"}},
+        "evidenceGaps": {"type": "array", "items": {"type": "object"}}
+      },
+      "additionalProperties": true
+    },
+    "evaluation": {
+      "type": "object",
+      "required": ["evaluationId", "targetId", "level", "status"],
+      "properties": {
+        "evaluationId": {"type": "string"},
+        "targetId": {"type": "string"},
+        "criterion": {"type": "string"},
+        "evaluatorNodeId": {"type": "string"},
+        "level": {"enum": ["L0","L1","L2","L3","L4"]},
+        "status": {"enum": ["PASS","FAIL","UNKNOWN","PARTIAL"]},
+        "score": {"type": ["number","null"]},
+        "evidenceRefs": {"type": "array", "items": {"type": "string"}},
+        "confidence": {"type": ["number","null"], "minimum": 0, "maximum": 1}
+      },
+      "additionalProperties": true
+    },
+    "reflection": {
+      "type": "object",
+      "required": ["reflectionId", "runId", "status"],
+      "properties": {
+        "reflectionId": {"type": "string"},
+        "runId": {"type": "string"},
+        "situation": {"type": "string"},
+        "action": {"type": "string"},
+        "outcome": {"type": "string"},
+        "suspectedMechanism": {"type": "string"},
+        "counterexamples": {"type": "array", "items": {"type": "string"}},
+        "status": {"enum": ["CANDIDATE","VERIFIED","REJECTED"]}
+      },
+      "additionalProperties": true
+    },
+    "experience": {
+      "type": "object",
+      "required": ["experienceId", "status", "sourceRunIds"],
+      "properties": {
+        "experienceId": {"type": "string"},
+        "patternId": {"type": "string"},
+        "routeId": {"type": "string"},
+        "conditions": {"type": "array", "items": {"type": "string"}},
+        "outcome": {"type": "string"},
+        "lesson": {"type": "string"},
+        "confidence": {"type": ["number","null"], "minimum": 0, "maximum": 1},
+        "sourceRunIds": {"type": "array", "items": {"type": "string"}},
+        "status": {"enum": ["CANDIDATE","VERIFIED","ACCEPTED","RETIRED"]}
+      },
+      "additionalProperties": true
+    },
+    "gate": {
+      "type": "object",
+      "required": ["gateId", "actionClass", "status"],
+      "properties": {
+        "gateId": {"type": "string"},
+        "actionClass": {"enum": ["A0","A1","A2","A3","A4","A5"]},
+        "status": {"enum": ["PENDING","APPROVED","REJECTED","REVISED"]},
+        "decidedBy": {"type": ["string","null"]},
+        "reason": {"type": ["string","null"]},
+        "createdAt": {"type": "string", "format": "date-time"}
+      },
+      "additionalProperties": true
+    }
+  }
+}

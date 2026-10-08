@@ -1,0 +1,1316 @@
+{
+  "schemaVersion": "E001/1.0",
+  "bundleType": "E001_STORE_BUNDLE",
+  "createdAt": "2026-10-08T09:30:00Z",
+  "records": {
+    "case": [
+      {
+        "schemaVersion": "E001/1.0",
+        "caseId": "CASE-FIX-001",
+        "question": "Fixture question: what does the attached note say about the harbor?",
+        "intent": "Schema fixture only. Not a research case.",
+        "constraints": [
+          "Do not infer beyond the source."
+        ],
+        "createdAt": "2026-10-08T09:00:00Z",
+        "status": "OPEN"
+      }
+    ],
+    "designSpace": [
+      {
+        "schemaVersion": "E001/1.0",
+        "designSpaceId": "DS-FIX-001",
+        "caseId": "CASE-FIX-001",
+        "objective": "Fixture question: what does the attached note say about the harbor?",
+        "constraints": [],
+        "notes": "Compare P001 and P002 on the same case.",
+        "createdAt": "2026-10-08T09:01:00Z"
+      }
+    ],
+    "node": [
+      {
+        "schemaVersion": "E001/1.0",
+        "nodeId": "NODE-studio",
+        "kind": "SYSTEM",
+        "displayName": "Studio",
+        "createdAt": "2026-10-08T09:00:00Z"
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "nodeId": "NODE-human-01",
+        "kind": "HUMAN",
+        "displayName": "Human operator",
+        "createdAt": "2026-10-08T09:00:00Z"
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "nodeId": "NODE-observer-a",
+        "kind": "MODEL",
+        "displayName": "Observer A",
+        "createdAt": "2026-10-08T09:00:00Z"
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "nodeId": "NODE-observer-b",
+        "kind": "MODEL",
+        "displayName": "Observer B",
+        "createdAt": "2026-10-08T09:00:00Z"
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "nodeId": "NODE-observer-c",
+        "kind": "MODEL",
+        "displayName": "Observer C",
+        "createdAt": "2026-10-08T09:00:00Z"
+      }
+    ],
+    "provider": [
+      {
+        "schemaVersion": "E001/1.0",
+        "providerId": "PROV-manual-clipboard",
+        "kind": "MANUAL_CLIPBOARD",
+        "maxIsolationAssurance": "PACKET_CONTROLLED",
+        "createdAt": "2026-10-08T09:00:00Z"
+      }
+    ],
+    "pattern": [
+      {
+        "schemaVersion": "E001/1.0",
+        "patternId": "PAT-P001",
+        "version": "1.0",
+        "name": "Independent / Parallel",
+        "topology": "PARALLEL",
+        "slots": [
+          {
+            "slotId": "obsA",
+            "role": "OBSERVER"
+          },
+          {
+            "slotId": "obsB",
+            "role": "OBSERVER"
+          },
+          {
+            "slotId": "obsC",
+            "role": "OBSERVER"
+          },
+          {
+            "slotId": "synth",
+            "role": "SYNTHESIZER"
+          }
+        ]
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "patternId": "PAT-P002",
+        "version": "1.0",
+        "name": "Sequential",
+        "topology": "SEQUENTIAL",
+        "slots": [
+          {
+            "slotId": "step1",
+            "role": "OBSERVER",
+            "order": 1
+          },
+          {
+            "slotId": "step2",
+            "role": "OBSERVER",
+            "order": 2
+          },
+          {
+            "slotId": "step3",
+            "role": "OBSERVER",
+            "order": 3
+          },
+          {
+            "slotId": "synth",
+            "role": "SYNTHESIZER",
+            "order": 4
+          }
+        ]
+      }
+    ],
+    "route": [
+      {
+        "schemaVersion": "E001/1.0",
+        "routeId": "ROUTE-P001-FIX",
+        "version": "1.0",
+        "patternRef": {
+          "id": "PAT-P001",
+          "version": "1.0"
+        },
+        "protocolRef": {
+          "id": "PROTO-P001",
+          "version": "1.0"
+        },
+        "slotBindings": [
+          {
+            "slotId": "obsA",
+            "nodeId": "NODE-observer-a",
+            "providerId": "PROV-manual-clipboard"
+          },
+          {
+            "slotId": "obsB",
+            "nodeId": "NODE-observer-b",
+            "providerId": "PROV-manual-clipboard"
+          },
+          {
+            "slotId": "obsC",
+            "nodeId": "NODE-observer-c",
+            "providerId": "PROV-manual-clipboard"
+          },
+          {
+            "slotId": "synth",
+            "nodeId": "NODE-human-01",
+            "providerId": "PROV-manual-clipboard"
+          }
+        ],
+        "edges": [
+          {
+            "edgeId": "case-a",
+            "fromNodeId": "NODE-studio",
+            "toNodeId": "NODE-observer-a",
+            "allowedArtifactKinds": [
+              "CASE_INPUT",
+              "SOURCE_CONTENT"
+            ],
+            "order": 1
+          },
+          {
+            "edgeId": "case-b",
+            "fromNodeId": "NODE-studio",
+            "toNodeId": "NODE-observer-b",
+            "allowedArtifactKinds": [
+              "CASE_INPUT",
+              "SOURCE_CONTENT"
+            ],
+            "order": 1
+          },
+          {
+            "edgeId": "case-c",
+            "fromNodeId": "NODE-studio",
+            "toNodeId": "NODE-observer-c",
+            "allowedArtifactKinds": [
+              "CASE_INPUT",
+              "SOURCE_CONTENT"
+            ],
+            "order": 1
+          },
+          {
+            "edgeId": "syn-a",
+            "fromNodeId": "NODE-observer-a",
+            "toNodeId": "NODE-human-01",
+            "allowedArtifactKinds": [
+              "RAW_RESPONSE"
+            ],
+            "order": 2
+          },
+          {
+            "edgeId": "syn-b",
+            "fromNodeId": "NODE-observer-b",
+            "toNodeId": "NODE-human-01",
+            "allowedArtifactKinds": [
+              "RAW_RESPONSE"
+            ],
+            "order": 2
+          },
+          {
+            "edgeId": "syn-c",
+            "fromNodeId": "NODE-observer-c",
+            "toNodeId": "NODE-human-01",
+            "allowedArtifactKinds": [
+              "RAW_RESPONSE"
+            ],
+            "order": 2
+          }
+        ]
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "routeId": "ROUTE-P002-FIX",
+        "version": "1.0",
+        "patternRef": {
+          "id": "PAT-P002",
+          "version": "1.0"
+        },
+        "protocolRef": {
+          "id": "PROTO-P002",
+          "version": "1.0"
+        },
+        "slotBindings": [
+          {
+            "slotId": "step1",
+            "nodeId": "NODE-observer-a",
+            "providerId": "PROV-manual-clipboard"
+          },
+          {
+            "slotId": "step2",
+            "nodeId": "NODE-observer-b",
+            "providerId": "PROV-manual-clipboard"
+          },
+          {
+            "slotId": "step3",
+            "nodeId": "NODE-observer-c",
+            "providerId": "PROV-manual-clipboard"
+          },
+          {
+            "slotId": "synth",
+            "nodeId": "NODE-human-01",
+            "providerId": "PROV-manual-clipboard"
+          }
+        ],
+        "edges": [
+          {
+            "edgeId": "case-a",
+            "fromNodeId": "NODE-studio",
+            "toNodeId": "NODE-observer-a",
+            "allowedArtifactKinds": [
+              "CASE_INPUT",
+              "SOURCE_CONTENT"
+            ],
+            "order": 1
+          },
+          {
+            "edgeId": "case-b",
+            "fromNodeId": "NODE-studio",
+            "toNodeId": "NODE-observer-b",
+            "allowedArtifactKinds": [
+              "CASE_INPUT",
+              "SOURCE_CONTENT"
+            ],
+            "order": 2
+          },
+          {
+            "edgeId": "case-c",
+            "fromNodeId": "NODE-studio",
+            "toNodeId": "NODE-observer-c",
+            "allowedArtifactKinds": [
+              "CASE_INPUT",
+              "SOURCE_CONTENT"
+            ],
+            "order": 3
+          },
+          {
+            "edgeId": "a-to-b",
+            "fromNodeId": "NODE-observer-a",
+            "toNodeId": "NODE-observer-b",
+            "allowedArtifactKinds": [
+              "RAW_RESPONSE"
+            ],
+            "order": 2
+          },
+          {
+            "edgeId": "b-to-c",
+            "fromNodeId": "NODE-observer-b",
+            "toNodeId": "NODE-observer-c",
+            "allowedArtifactKinds": [
+              "RAW_RESPONSE"
+            ],
+            "order": 3
+          },
+          {
+            "edgeId": "c-to-syn",
+            "fromNodeId": "NODE-observer-c",
+            "toNodeId": "NODE-human-01",
+            "allowedArtifactKinds": [
+              "RAW_RESPONSE"
+            ],
+            "order": 4
+          }
+        ]
+      }
+    ],
+    "protocol": [
+      {
+        "schemaVersion": "E001/1.0",
+        "protocolId": "PROTO-P001",
+        "version": "1.0",
+        "defaultEffect": "DENY",
+        "conflictResolution": "DENY_OVERRIDES",
+        "violationAction": "BLOCK",
+        "rules": [
+          {
+            "ruleId": "case-input",
+            "subject": {
+              "type": "ANY"
+            },
+            "action": "RECEIVE",
+            "object": {
+              "artifactKinds": [
+                "CASE_INPUT",
+                "SOURCE_CONTENT"
+              ],
+              "producerRelation": "NONE"
+            },
+            "effect": "ALLOW",
+            "condition": "ALWAYS"
+          },
+          {
+            "ruleId": "observer-submit",
+            "subject": {
+              "type": "ROLE",
+              "value": "OBSERVER"
+            },
+            "action": "SUBMIT",
+            "object": {
+              "artifactKinds": [
+                "RAW_RESPONSE"
+              ],
+              "producerRelation": "SELF"
+            },
+            "effect": "ALLOW",
+            "condition": "ALWAYS"
+          },
+          {
+            "ruleId": "no-peer",
+            "subject": {
+              "type": "ROLE",
+              "value": "OBSERVER"
+            },
+            "action": "RECEIVE",
+            "object": {
+              "artifactKinds": [
+                "RAW_RESPONSE"
+              ],
+              "producerRelation": "PEER"
+            },
+            "effect": "DENY",
+            "condition": "ALWAYS"
+          },
+          {
+            "ruleId": "synth-input",
+            "subject": {
+              "type": "ROLE",
+              "value": "SYNTHESIZER"
+            },
+            "action": "RECEIVE",
+            "object": {
+              "artifactKinds": [
+                "RAW_RESPONSE"
+              ],
+              "producerRelation": "ROUTE_PREDECESSOR"
+            },
+            "effect": "ALLOW",
+            "condition": "ROUTE_EDGE_EXISTS"
+          }
+        ]
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "protocolId": "PROTO-P002",
+        "version": "1.0",
+        "defaultEffect": "DENY",
+        "conflictResolution": "DENY_OVERRIDES",
+        "violationAction": "BLOCK",
+        "rules": [
+          {
+            "ruleId": "case-input",
+            "subject": {
+              "type": "ANY"
+            },
+            "action": "RECEIVE",
+            "object": {
+              "artifactKinds": [
+                "CASE_INPUT",
+                "SOURCE_CONTENT"
+              ],
+              "producerRelation": "NONE"
+            },
+            "effect": "ALLOW",
+            "condition": "ALWAYS"
+          },
+          {
+            "ruleId": "observer-submit",
+            "subject": {
+              "type": "ROLE",
+              "value": "OBSERVER"
+            },
+            "action": "SUBMIT",
+            "object": {
+              "artifactKinds": [
+                "RAW_RESPONSE"
+              ],
+              "producerRelation": "SELF"
+            },
+            "effect": "ALLOW",
+            "condition": "ALWAYS"
+          },
+          {
+            "ruleId": "predecessor",
+            "subject": {
+              "type": "ROLE",
+              "value": "OBSERVER"
+            },
+            "action": "RECEIVE",
+            "object": {
+              "artifactKinds": [
+                "RAW_RESPONSE"
+              ],
+              "producerRelation": "ROUTE_PREDECESSOR"
+            },
+            "effect": "ALLOW",
+            "condition": "ROUTE_EDGE_EXISTS"
+          },
+          {
+            "ruleId": "no-peer",
+            "subject": {
+              "type": "ROLE",
+              "value": "OBSERVER"
+            },
+            "action": "RECEIVE",
+            "object": {
+              "artifactKinds": [
+                "RAW_RESPONSE"
+              ],
+              "producerRelation": "PEER"
+            },
+            "effect": "DENY",
+            "condition": "ALWAYS"
+          },
+          {
+            "ruleId": "synth-input",
+            "subject": {
+              "type": "ROLE",
+              "value": "SYNTHESIZER"
+            },
+            "action": "RECEIVE",
+            "object": {
+              "artifactKinds": [
+                "RAW_RESPONSE"
+              ],
+              "producerRelation": "ROUTE_PREDECESSOR"
+            },
+            "effect": "ALLOW",
+            "condition": "ROUTE_EDGE_EXISTS"
+          }
+        ]
+      }
+    ],
+    "trial": [
+      {
+        "schemaVersion": "E001/1.0",
+        "trialId": "TRIAL-FIX-P001",
+        "caseId": "CASE-FIX-001",
+        "designSpaceId": "DS-FIX-001",
+        "hypothesis": "Independent observers expose differences.",
+        "patternRef": {
+          "id": "PAT-P001",
+          "version": "1.0"
+        },
+        "routeRef": {
+          "id": "ROUTE-P001-FIX",
+          "version": "1.0"
+        },
+        "protocolRef": {
+          "id": "PROTO-P001",
+          "version": "1.0"
+        },
+        "appliedExperienceIds": [],
+        "previousTrialId": null,
+        "budget": {
+          "maxRuns": 3
+        },
+        "createdAt": "2026-10-08T09:02:00Z",
+        "status": "ACTIVE"
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "trialId": "TRIAL-FIX-P002",
+        "caseId": "CASE-FIX-001",
+        "designSpaceId": "DS-FIX-001",
+        "hypothesis": "Sequential observers build on each other.",
+        "patternRef": {
+          "id": "PAT-P002",
+          "version": "1.0"
+        },
+        "routeRef": {
+          "id": "ROUTE-P002-FIX",
+          "version": "1.0"
+        },
+        "protocolRef": {
+          "id": "PROTO-P002",
+          "version": "1.0"
+        },
+        "appliedExperienceIds": [],
+        "previousTrialId": "TRIAL-FIX-P001",
+        "budget": {
+          "maxRuns": 3
+        },
+        "createdAt": "2026-10-08T09:02:00Z",
+        "status": "PLANNED"
+      }
+    ],
+    "run": [
+      {
+        "schemaVersion": "E001/1.0",
+        "runId": "RUN-FIX-P001-1",
+        "trialId": "TRIAL-FIX-P001",
+        "runManifestId": "MAN-FIX-P001-1",
+        "startedAt": "2026-10-08T09:04:00Z",
+        "completedAt": null,
+        "status": "PAUSED",
+        "retryOfRunId": null
+      }
+    ],
+    "runManifest": [
+      {
+        "schemaVersion": "E001/1.0",
+        "runManifestId": "MAN-FIX-P001-1",
+        "runId": "RUN-FIX-P001-1",
+        "frozenAt": "2026-10-08T09:04:00Z",
+        "caseId": "CASE-FIX-001",
+        "trialId": "TRIAL-FIX-P001",
+        "patternRef": {
+          "id": "PAT-P001",
+          "version": "1.0"
+        },
+        "routeRef": {
+          "id": "ROUTE-P001-FIX",
+          "version": "1.0"
+        },
+        "protocolRef": {
+          "id": "PROTO-P001",
+          "version": "1.0"
+        },
+        "nodes": [
+          {
+            "schemaVersion": "E001/1.0",
+            "nodeId": "NODE-studio",
+            "kind": "SYSTEM",
+            "displayName": "Studio",
+            "createdAt": "2026-10-08T09:00:00Z"
+          },
+          {
+            "schemaVersion": "E001/1.0",
+            "nodeId": "NODE-human-01",
+            "kind": "HUMAN",
+            "displayName": "Human operator",
+            "createdAt": "2026-10-08T09:00:00Z"
+          },
+          {
+            "schemaVersion": "E001/1.0",
+            "nodeId": "NODE-observer-a",
+            "kind": "MODEL",
+            "displayName": "Observer A",
+            "createdAt": "2026-10-08T09:00:00Z"
+          },
+          {
+            "schemaVersion": "E001/1.0",
+            "nodeId": "NODE-observer-b",
+            "kind": "MODEL",
+            "displayName": "Observer B",
+            "createdAt": "2026-10-08T09:00:00Z"
+          },
+          {
+            "schemaVersion": "E001/1.0",
+            "nodeId": "NODE-observer-c",
+            "kind": "MODEL",
+            "displayName": "Observer C",
+            "createdAt": "2026-10-08T09:00:00Z"
+          }
+        ],
+        "roleAssignments": [
+          {
+            "slotId": "obsA",
+            "role": "OBSERVER",
+            "nodeId": "NODE-observer-a",
+            "providerId": "PROV-manual-clipboard"
+          },
+          {
+            "slotId": "obsB",
+            "role": "OBSERVER",
+            "nodeId": "NODE-observer-b",
+            "providerId": "PROV-manual-clipboard"
+          },
+          {
+            "slotId": "obsC",
+            "role": "OBSERVER",
+            "nodeId": "NODE-observer-c",
+            "providerId": "PROV-manual-clipboard"
+          },
+          {
+            "slotId": "synth",
+            "role": "SYNTHESIZER",
+            "nodeId": "NODE-human-01",
+            "providerId": "PROV-manual-clipboard"
+          }
+        ],
+        "providers": [
+          {
+            "schemaVersion": "E001/1.0",
+            "providerId": "PROV-manual-clipboard",
+            "kind": "MANUAL_CLIPBOARD",
+            "maxIsolationAssurance": "PACKET_CONTROLLED",
+            "createdAt": "2026-10-08T09:00:00Z"
+          }
+        ],
+        "sources": [
+          {
+            "sourceId": "SRC-FIX-001",
+            "verificationStatus": "VERIFIED",
+            "verifiedHash": "2189b47e0c057502bee990b6c49d8dab9cc3e5a5c2f26419a73f762b943096b3",
+            "claimedHash": null
+          }
+        ],
+        "initialArtifactIds": [
+          "ART-case-input",
+          "ART-source-001"
+        ],
+        "configuration": {}
+      }
+    ],
+    "source": [
+      {
+        "schemaVersion": "E001/1.0",
+        "sourceId": "SRC-FIX-001",
+        "caseId": "CASE-FIX-001",
+        "kind": "TEXT",
+        "reference": "fixture-note.txt",
+        "contentArtifactId": "ART-source-001",
+        "claimedHash": null,
+        "verifiedHash": "2189b47e0c057502bee990b6c49d8dab9cc3e5a5c2f26419a73f762b943096b3",
+        "hashAlgorithm": "SHA-256",
+        "accessClassification": "PUBLIC",
+        "verificationStatus": "VERIFIED",
+        "createdAt": "2026-10-08T09:01:00Z"
+      }
+    ],
+    "artifact": [
+      {
+        "schemaVersion": "E001/1.0",
+        "artifactId": "ART-case-input",
+        "kind": "CASE_INPUT",
+        "content": "Fixture question: what does the attached note say about the harbor?",
+        "encoding": "utf-8",
+        "byteSize": 67,
+        "contentHash": "0317ae645caf11fb31bff136a3eb659d254e5321760c578a0946ca9178e6f778",
+        "hashAlgorithm": "SHA-256",
+        "createdAt": "2026-10-08T09:00:00Z",
+        "provenance": {
+          "sourceKind": "USER",
+          "receivedVia": "SYSTEM_GENERATED",
+          "caseId": "CASE-FIX-001",
+          "runId": null,
+          "transferId": null
+        },
+        "producerNodeId": null,
+        "parentArtifactIds": []
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "artifactId": "ART-source-001",
+        "kind": "SOURCE_CONTENT",
+        "content": "Fixture source note. The harbor opened in 1859.\n",
+        "encoding": "utf-8",
+        "byteSize": 48,
+        "contentHash": "2189b47e0c057502bee990b6c49d8dab9cc3e5a5c2f26419a73f762b943096b3",
+        "hashAlgorithm": "SHA-256",
+        "createdAt": "2026-10-08T09:01:00Z",
+        "provenance": {
+          "sourceKind": "USER",
+          "receivedVia": "MANUAL_FILE",
+          "caseId": "CASE-FIX-001",
+          "runId": null,
+          "transferId": null
+        },
+        "producerNodeId": null,
+        "parentArtifactIds": []
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "artifactId": "ART-packet-a",
+        "kind": "PACKET",
+        "content": "[packet to NODE-observer-a]\nQUESTION:\nFixture question: what does the attached note say about the harbor?\nSOURCE SRC-FIX-001:\nFixture source note. The harbor opened in 1859.\n",
+        "encoding": "utf-8",
+        "byteSize": 174,
+        "contentHash": "2a05c8e0598e329d6e86c2045f23fef4ef9ac4a38fdeffa014e4656f3417c527",
+        "hashAlgorithm": "SHA-256",
+        "createdAt": "2026-10-08T09:05:00Z",
+        "provenance": {
+          "sourceKind": "SYSTEM",
+          "receivedVia": "SYSTEM_GENERATED",
+          "caseId": "CASE-FIX-001",
+          "runId": "RUN-FIX-P001-1",
+          "transferId": "XFER-fix-a"
+        },
+        "producerNodeId": "NODE-studio",
+        "parentArtifactIds": [
+          "ART-case-input",
+          "ART-source-001"
+        ]
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "artifactId": "ART-packet-b",
+        "kind": "PACKET",
+        "content": "[packet to NODE-observer-b]\nQUESTION:\nFixture question: what does the attached note say about the harbor?\nSOURCE SRC-FIX-001:\nFixture source note. The harbor opened in 1859.\n",
+        "encoding": "utf-8",
+        "byteSize": 174,
+        "contentHash": "19e1972c39264c7784d2e8fabf086230008691017a5edb463b2e0e6b0348d186",
+        "hashAlgorithm": "SHA-256",
+        "createdAt": "2026-10-08T09:05:00Z",
+        "provenance": {
+          "sourceKind": "SYSTEM",
+          "receivedVia": "SYSTEM_GENERATED",
+          "caseId": "CASE-FIX-001",
+          "runId": "RUN-FIX-P001-1",
+          "transferId": "XFER-fix-b"
+        },
+        "producerNodeId": "NODE-studio",
+        "parentArtifactIds": [
+          "ART-case-input",
+          "ART-source-001"
+        ]
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "artifactId": "ART-packet-c",
+        "kind": "PACKET",
+        "content": "[packet to NODE-observer-c]\nQUESTION:\nFixture question: what does the attached note say about the harbor?\nSOURCE SRC-FIX-001:\nFixture source note. The harbor opened in 1859.\n",
+        "encoding": "utf-8",
+        "byteSize": 174,
+        "contentHash": "d579450b64c681720e362fa0fd68010b5584058495b392c2ee1c44c901ce646a",
+        "hashAlgorithm": "SHA-256",
+        "createdAt": "2026-10-08T09:05:00Z",
+        "provenance": {
+          "sourceKind": "SYSTEM",
+          "receivedVia": "SYSTEM_GENERATED",
+          "caseId": "CASE-FIX-001",
+          "runId": "RUN-FIX-P001-1",
+          "transferId": "XFER-fix-c"
+        },
+        "producerNodeId": "NODE-studio",
+        "parentArtifactIds": [
+          "ART-case-input",
+          "ART-source-001"
+        ]
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "artifactId": "ART-raw-a",
+        "kind": "RAW_RESPONSE",
+        "content": "Observation A: the note says the harbor opened in 1859. SECRET-A",
+        "encoding": "utf-8",
+        "byteSize": 64,
+        "contentHash": "b120f4a8dd1354e1846fd7ead703828f4f550fbc04c41614a762e01017dd6daf",
+        "hashAlgorithm": "SHA-256",
+        "createdAt": "2026-10-08T09:10:00Z",
+        "provenance": {
+          "sourceKind": "AI",
+          "receivedVia": "MANUAL_PASTE",
+          "caseId": "CASE-FIX-001",
+          "runId": "RUN-FIX-P001-1",
+          "transferId": "XFER-fix-a"
+        },
+        "producerNodeId": "NODE-observer-a",
+        "parentArtifactIds": [
+          "ART-packet-a"
+        ]
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "artifactId": "ART-raw-b",
+        "kind": "RAW_RESPONSE",
+        "content": "Observation B: opening year 1859 per the note.\r\nUnclear who opened it. SECRET-B",
+        "encoding": "utf-8",
+        "byteSize": 79,
+        "contentHash": "65055d3987176a734681d46363adbc2d960797a4fe930a497d7cea0c0ffef3d6",
+        "hashAlgorithm": "SHA-256",
+        "createdAt": "2026-10-08T09:11:00Z",
+        "provenance": {
+          "sourceKind": "AI",
+          "receivedVia": "MANUAL_PASTE",
+          "caseId": "CASE-FIX-001",
+          "runId": "RUN-FIX-P001-1",
+          "transferId": "XFER-fix-b"
+        },
+        "producerNodeId": "NODE-observer-b",
+        "parentArtifactIds": [
+          "ART-packet-b"
+        ]
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "artifactId": "ART-raw-c",
+        "kind": "RAW_RESPONSE",
+        "content": "Observation C: the note gives 1858 as the opening year. SECRET-C",
+        "encoding": "utf-8",
+        "byteSize": 64,
+        "contentHash": "1166eee55fa22b8392a2ee99c95a225879706902dd4bd195046da145bd85ef10",
+        "hashAlgorithm": "SHA-256",
+        "createdAt": "2026-10-08T09:12:00Z",
+        "provenance": {
+          "sourceKind": "AI",
+          "receivedVia": "MANUAL_PASTE",
+          "caseId": "CASE-FIX-001",
+          "runId": "RUN-FIX-P001-1",
+          "transferId": "XFER-fix-c"
+        },
+        "producerNodeId": "NODE-observer-c",
+        "parentArtifactIds": [
+          "ART-packet-c"
+        ]
+      }
+    ],
+    "event": [
+      {
+        "schemaVersion": "E001/1.0",
+        "eventId": "EVT-fix-001",
+        "sequence": 1,
+        "timestamp": "2026-10-08T09:00:00Z",
+        "actorNodeId": "NODE-human-01",
+        "eventType": "CASE_CREATED",
+        "targetType": "case",
+        "targetId": "CASE-FIX-001",
+        "payload": {},
+        "artifactRefs": []
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "eventId": "EVT-fix-002",
+        "sequence": 2,
+        "timestamp": "2026-10-08T09:01:00Z",
+        "actorNodeId": "NODE-studio",
+        "eventType": "SOURCE_REGISTERED",
+        "targetType": "source",
+        "targetId": "SRC-FIX-001",
+        "payload": {},
+        "artifactRefs": [
+          "ART-source-001"
+        ]
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "eventId": "EVT-fix-003",
+        "sequence": 3,
+        "timestamp": "2026-10-08T09:02:00Z",
+        "actorNodeId": "NODE-studio",
+        "eventType": "TRIAL_CREATED",
+        "targetType": "trial",
+        "targetId": "TRIAL-FIX-P001",
+        "payload": {},
+        "artifactRefs": []
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "eventId": "EVT-fix-004",
+        "sequence": 4,
+        "timestamp": "2026-10-08T09:02:00Z",
+        "actorNodeId": "NODE-studio",
+        "eventType": "TRIAL_CREATED",
+        "targetType": "trial",
+        "targetId": "TRIAL-FIX-P002",
+        "payload": {},
+        "artifactRefs": []
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "eventId": "EVT-fix-005",
+        "sequence": 5,
+        "timestamp": "2026-10-08T09:04:00Z",
+        "actorNodeId": "NODE-studio",
+        "eventType": "RUN_STARTED",
+        "targetType": "run",
+        "targetId": "RUN-FIX-P001-1",
+        "payload": {},
+        "artifactRefs": []
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "eventId": "EVT-fix-006",
+        "sequence": 6,
+        "timestamp": "2026-10-08T09:05:00Z",
+        "actorNodeId": "NODE-studio",
+        "eventType": "PACKET_ASSEMBLED",
+        "targetType": "artifact",
+        "targetId": "ART-packet-a",
+        "payload": {},
+        "artifactRefs": [
+          "ART-packet-a"
+        ]
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "eventId": "EVT-fix-007",
+        "sequence": 7,
+        "timestamp": "2026-10-08T09:05:00Z",
+        "actorNodeId": "NODE-studio",
+        "eventType": "PACKET_ASSEMBLED",
+        "targetType": "artifact",
+        "targetId": "ART-packet-b",
+        "payload": {},
+        "artifactRefs": [
+          "ART-packet-b"
+        ]
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "eventId": "EVT-fix-008",
+        "sequence": 8,
+        "timestamp": "2026-10-08T09:05:00Z",
+        "actorNodeId": "NODE-studio",
+        "eventType": "PACKET_ASSEMBLED",
+        "targetType": "artifact",
+        "targetId": "ART-packet-c",
+        "payload": {},
+        "artifactRefs": [
+          "ART-packet-c"
+        ]
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "eventId": "EVT-fix-009",
+        "sequence": 9,
+        "timestamp": "2026-10-08T09:05:00Z",
+        "actorNodeId": "NODE-studio",
+        "eventType": "TRANSFER_CREATED",
+        "targetType": "transfer",
+        "targetId": "XFER-fix-a",
+        "payload": {},
+        "artifactRefs": [
+          "ART-packet-a"
+        ]
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "eventId": "EVT-fix-010",
+        "sequence": 10,
+        "timestamp": "2026-10-08T09:05:00Z",
+        "actorNodeId": "NODE-studio",
+        "eventType": "TRANSFER_CREATED",
+        "targetType": "transfer",
+        "targetId": "XFER-fix-b",
+        "payload": {},
+        "artifactRefs": [
+          "ART-packet-b"
+        ]
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "eventId": "EVT-fix-011",
+        "sequence": 11,
+        "timestamp": "2026-10-08T09:05:00Z",
+        "actorNodeId": "NODE-studio",
+        "eventType": "TRANSFER_CREATED",
+        "targetType": "transfer",
+        "targetId": "XFER-fix-c",
+        "payload": {},
+        "artifactRefs": [
+          "ART-packet-c"
+        ]
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "eventId": "EVT-fix-012",
+        "sequence": 12,
+        "timestamp": "2026-10-08T09:10:00Z",
+        "actorNodeId": "NODE-studio",
+        "eventType": "ARTIFACT_RECEIVED",
+        "targetType": "artifact",
+        "targetId": "ART-raw-a",
+        "payload": {},
+        "artifactRefs": [
+          "ART-raw-a"
+        ]
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "eventId": "EVT-fix-013",
+        "sequence": 13,
+        "timestamp": "2026-10-08T09:11:00Z",
+        "actorNodeId": "NODE-studio",
+        "eventType": "ARTIFACT_RECEIVED",
+        "targetType": "artifact",
+        "targetId": "ART-raw-b",
+        "payload": {},
+        "artifactRefs": [
+          "ART-raw-b"
+        ]
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "eventId": "EVT-fix-014",
+        "sequence": 14,
+        "timestamp": "2026-10-08T09:12:00Z",
+        "actorNodeId": "NODE-studio",
+        "eventType": "ARTIFACT_RECEIVED",
+        "targetType": "artifact",
+        "targetId": "ART-raw-c",
+        "payload": {},
+        "artifactRefs": [
+          "ART-raw-c"
+        ]
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "eventId": "EVT-fix-015",
+        "sequence": 15,
+        "timestamp": "2026-10-08T09:15:00Z",
+        "actorNodeId": "NODE-studio",
+        "eventType": "OBSERVATION_CREATED",
+        "targetType": "observation",
+        "targetId": "OBS-fix-a",
+        "payload": {},
+        "artifactRefs": [
+          "ART-raw-a"
+        ]
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "eventId": "EVT-fix-016",
+        "sequence": 16,
+        "timestamp": "2026-10-08T09:15:00Z",
+        "actorNodeId": "NODE-studio",
+        "eventType": "OBSERVATION_CREATED",
+        "targetType": "observation",
+        "targetId": "OBS-fix-b",
+        "payload": {},
+        "artifactRefs": [
+          "ART-raw-b"
+        ]
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "eventId": "EVT-fix-017",
+        "sequence": 17,
+        "timestamp": "2026-10-08T09:15:00Z",
+        "actorNodeId": "NODE-studio",
+        "eventType": "OBSERVATION_CREATED",
+        "targetType": "observation",
+        "targetId": "OBS-fix-c",
+        "payload": {},
+        "artifactRefs": [
+          "ART-raw-c"
+        ]
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "eventId": "EVT-fix-018",
+        "sequence": 18,
+        "timestamp": "2026-10-08T09:20:00Z",
+        "actorNodeId": "NODE-human-01",
+        "eventType": "SYNTHESIS_CREATED",
+        "targetType": "synthesis",
+        "targetId": "SYN-FIX-001",
+        "payload": {},
+        "artifactRefs": []
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "eventId": "EVT-fix-019",
+        "sequence": 19,
+        "timestamp": "2026-10-08T09:21:00Z",
+        "actorNodeId": "NODE-studio",
+        "eventType": "EVALUATION_CREATED",
+        "targetType": "evaluation",
+        "targetId": "EVAL-FIX-001",
+        "payload": {},
+        "artifactRefs": [
+          "ART-raw-a"
+        ]
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "eventId": "EVT-fix-020",
+        "sequence": 20,
+        "timestamp": "2026-10-08T09:25:00Z",
+        "actorNodeId": "NODE-human-01",
+        "eventType": "GATE_DECIDED",
+        "targetType": "gate",
+        "targetId": "GATE-FIX-001",
+        "payload": {},
+        "artifactRefs": []
+      }
+    ],
+    "transfer": [
+      {
+        "schemaVersion": "E001/1.0",
+        "transferId": "XFER-fix-a",
+        "runId": "RUN-FIX-P001-1",
+        "edgeId": "case-a",
+        "fromNodeId": "NODE-studio",
+        "toNodeId": "NODE-observer-a",
+        "artifactIds": [
+          "ART-case-input",
+          "ART-source-001"
+        ],
+        "packetArtifactId": "ART-packet-a",
+        "packetHash": "2a05c8e0598e329d6e86c2045f23fef4ef9ac4a38fdeffa014e4656f3417c527",
+        "method": "MANUAL_CLIPBOARD",
+        "createdAt": "2026-10-08T09:05:00Z",
+        "status": "RESPONSE_RECEIVED",
+        "externalDelivery": "UNKNOWN",
+        "isolationAssurance": "PACKET_CONTROLLED"
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "transferId": "XFER-fix-b",
+        "runId": "RUN-FIX-P001-1",
+        "edgeId": "case-b",
+        "fromNodeId": "NODE-studio",
+        "toNodeId": "NODE-observer-b",
+        "artifactIds": [
+          "ART-case-input",
+          "ART-source-001"
+        ],
+        "packetArtifactId": "ART-packet-b",
+        "packetHash": "19e1972c39264c7784d2e8fabf086230008691017a5edb463b2e0e6b0348d186",
+        "method": "MANUAL_CLIPBOARD",
+        "createdAt": "2026-10-08T09:05:00Z",
+        "status": "RESPONSE_RECEIVED",
+        "externalDelivery": "UNKNOWN",
+        "isolationAssurance": "PACKET_CONTROLLED"
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "transferId": "XFER-fix-c",
+        "runId": "RUN-FIX-P001-1",
+        "edgeId": "case-c",
+        "fromNodeId": "NODE-studio",
+        "toNodeId": "NODE-observer-c",
+        "artifactIds": [
+          "ART-case-input",
+          "ART-source-001"
+        ],
+        "packetArtifactId": "ART-packet-c",
+        "packetHash": "d579450b64c681720e362fa0fd68010b5584058495b392c2ee1c44c901ce646a",
+        "method": "MANUAL_CLIPBOARD",
+        "createdAt": "2026-10-08T09:05:00Z",
+        "status": "RESPONSE_RECEIVED",
+        "externalDelivery": "UNKNOWN",
+        "isolationAssurance": "PACKET_CONTROLLED"
+      }
+    ],
+    "observation": [
+      {
+        "schemaVersion": "E001/1.0",
+        "observationId": "OBS-fix-a",
+        "runId": "RUN-FIX-P001-1",
+        "transferId": "XFER-fix-a",
+        "observerNodeId": "NODE-observer-a",
+        "providerId": "PROV-manual-clipboard",
+        "inputArtifactIds": [
+          "ART-case-input",
+          "ART-source-001"
+        ],
+        "rawResponseArtifactId": "ART-raw-a",
+        "parseStatus": "UNPARSED",
+        "fields": {},
+        "createdAt": "2026-10-08T09:15:00Z"
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "observationId": "OBS-fix-b",
+        "runId": "RUN-FIX-P001-1",
+        "transferId": "XFER-fix-b",
+        "observerNodeId": "NODE-observer-b",
+        "providerId": "PROV-manual-clipboard",
+        "inputArtifactIds": [
+          "ART-case-input",
+          "ART-source-001"
+        ],
+        "rawResponseArtifactId": "ART-raw-b",
+        "parseStatus": "UNPARSED",
+        "fields": {},
+        "createdAt": "2026-10-08T09:15:00Z"
+      },
+      {
+        "schemaVersion": "E001/1.0",
+        "observationId": "OBS-fix-c",
+        "runId": "RUN-FIX-P001-1",
+        "transferId": "XFER-fix-c",
+        "observerNodeId": "NODE-observer-c",
+        "providerId": "PROV-manual-clipboard",
+        "inputArtifactIds": [
+          "ART-case-input",
+          "ART-source-001"
+        ],
+        "rawResponseArtifactId": "ART-raw-c",
+        "parseStatus": "UNPARSED",
+        "fields": {},
+        "createdAt": "2026-10-08T09:15:00Z"
+      }
+    ],
+    "synthesis": [
+      {
+        "schemaVersion": "E001/1.0",
+        "synthesisId": "SYN-FIX-001",
+        "runId": "RUN-FIX-P001-1",
+        "synthesizerNodeId": "NODE-human-01",
+        "inputObservationIds": [
+          "OBS-fix-a",
+          "OBS-fix-b",
+          "OBS-fix-c"
+        ],
+        "rawResponseArtifactId": null,
+        "common": [
+          {
+            "text": "All observers report an opening year from the note.",
+            "observationIds": [
+              "OBS-fix-a",
+              "OBS-fix-b",
+              "OBS-fix-c"
+            ]
+          }
+        ],
+        "differences": [],
+        "unknowns": [
+          {
+            "text": "Who opened the harbor.",
+            "observationIds": [
+              "OBS-fix-b"
+            ]
+          }
+        ],
+        "contradictions": [
+          {
+            "text": "1859 (A, B) vs 1858 (C). Not resolved by count.",
+            "observationIds": [
+              "OBS-fix-a",
+              "OBS-fix-b",
+              "OBS-fix-c"
+            ]
+          }
+        ],
+        "executionNeeds": [],
+        "nextQuestions": [
+          {
+            "text": "Re-read the source line for the year.",
+            "observationIds": [
+              "OBS-fix-c"
+            ]
+          }
+        ],
+        "createdAt": "2026-10-08T09:20:00Z"
+      }
+    ],
+    "gate": [
+      {
+        "schemaVersion": "E001/1.0",
+        "gateId": "GATE-FIX-001",
+        "targetType": "synthesis",
+        "targetId": "SYN-FIX-001",
+        "targetContentHash": null,
+        "actionClass": "DECISION",
+        "proposedScope": "Accept the synthesis of CASE-FIX-001 run 1 as the working summary.",
+        "status": "HOLD",
+        "decidedBy": "NODE-human-01",
+        "decidedAt": "2026-10-08T09:25:00Z",
+        "reason": "Contradiction on the year is unresolved."
+      }
+    ],
+    "evaluation": [
+      {
+        "schemaVersion": "E001/1.0",
+        "evaluationId": "EVAL-FIX-001",
+        "targetType": "artifact",
+        "targetId": "ART-raw-a",
+        "level": "L1",
+        "criterion": "HASH_MATCH",
+        "status": "PASS",
+        "evaluatorNodeId": "NODE-studio",
+        "evidence": "SHA-256 of stored bytes equals contentHash.",
+        "createdAt": "2026-10-08T09:21:00Z"
+      }
+    ]
+  }
+}
