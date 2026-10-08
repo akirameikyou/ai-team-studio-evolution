@@ -4,7 +4,7 @@ This is deliberately NOT a general JSON Schema implementation. It interprets the
 keyword subset that studio_schema_e001.json uses and refuses any other keyword,
 so the schema can never rely on a rule that is silently skipped. Cross-record
 rules that JSON Schema cannot express (reference integrity, hashes, isolation
-ceilings, ...) are implemented below as semantic rules SR-01..SR-16.
+ceilings, ...) are implemented below as semantic rules SR-01..SR-21.
 
 The supported scope is documented in docs/SCHEMA_VALIDATION_SCOPE.md and every
 rule is exercised by tests/unit/test_schema.py.
@@ -13,6 +13,7 @@ Usage:
     python -m domain.schema.validator path/to/bundle.json   (run from evolution-e001/)
 """
 import datetime
+import functools
 import hashlib
 import json
 import re
@@ -36,6 +37,10 @@ SUPPORTED_FORMATS = {'date-time'}
 SUPPORTED_TYPES = {'object', 'array', 'string', 'integer', 'number', 'boolean', 'null'}
 
 MANUAL_PROVIDER_KINDS = {'MANUAL_CLIPBOARD', 'MANUAL_FILE'}
+# E002 §16 order of isolation assurance (higher = stronger claim).
+ASSURANCE_RANK = {'UNKNOWN': 0, 'DECLARED': 1, 'PACKET_CONTROLLED': 2, 'ENFORCED': 3}
+# Reserved E001 system node: the Studio itself (TRACEABILITY D-18).
+SYSTEM_ACTOR_ID = 'NODE-studio'
 _DATE_TIME = re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$')
 
 
@@ -56,6 +61,12 @@ def load_schema(path=SCHEMA_PATH):
     schema = json.loads(Path(path).read_text(encoding='utf-8'))
     _check_keywords(schema, '#', root=True)
     return schema
+
+
+@functools.lru_cache(maxsize=1)
+def _default_schema():
+    # Loaded and keyword-checked once per process; callers that pass a schema are unaffected.
+    return load_schema()
 
 
 def _check_keywords(node, path, root=False):
@@ -173,7 +184,7 @@ def _date_time_ok(s):
 
 def validate_record(entity, record, schema=None):
     """Structural check of one record. Reference integrity needs a bundle (validate_bundle)."""
-    schema = schema or load_schema()
+    schema = schema or _default_schema()
     meta = schema['x-entities'].get(entity)
     if meta is None:
         return [Issue('UNKNOWN_ENTITY', entity, f'unknown entity type {entity!r}')]
@@ -186,8 +197,8 @@ def validate_record(entity, record, schema=None):
 
 
 def validate_bundle(bundle, schema=None):
-    """Full check: structure, reference integrity and semantic rules SR-01..SR-16."""
-    schema = schema or load_schema()
+    """Full check: structure, reference integrity and semantic rules SR-01..SR-21."""
+    schema = schema or _default_schema()
     version = bundle.get('schemaVersion') if isinstance(bundle, dict) else None
     if version not in SUPPORTED_SCHEMA_VERSIONS:
         # Stop here: nothing else is interpreted for an unknown version.
@@ -430,6 +441,58 @@ def _semantic_rules(idx):
             tt, tid = r.get('targetType'), r.get('targetId')
             if isinstance(tt, str) and tt in idx.meta and idx.get(tt, tid) is None:
                 bad('SR-16', f'{entity}[{i}].targetId', f'target {tt} {tid!r} does not exist in this bundle')
+
+    # SR-17 artifact provenance agrees with its transfer, run and trial (artifact -> transfer -> run -> trial -> case)
+    for i, a in enumerate(recs.get('artifact', [])):
+        prov = a.get('provenance') if isinstance(a.get('provenance'), dict) else {}
+        t = idx.get('transfer', prov.get('transferId'))
+        if t is not None and t.get('runId') != prov.get('runId'):
+            bad('SR-17', f'artifact[{i}].provenance.runId', 'differs from the run of its transfer')
+        run = idx.get('run', prov.get('runId'))
+        trial = idx.get('trial', run.get('trialId')) if run else None
+        if trial is not None and trial.get('caseId') != prov.get('caseId'):
+            bad('SR-17', f'artifact[{i}].provenance.caseId', 'differs from the case of its run\'s trial')
+
+    # SR-18 a transfer claims no stronger isolation than the provider bound to its destination
+    for i, t in enumerate(recs.get('transfer', [])):
+        run = idx.get('run', t.get('runId'))
+        man = idx.get('runManifest', run.get('runManifestId')) if run else None
+        rt = idx.get_versioned('route', man.get('routeRef')) if man else None
+        binding = next((b for b in (rt.get('slotBindings') or []) if isinstance(b, dict) and b.get('nodeId') == t.get('toNodeId')), None) if rt else None
+        prov = idx.get('provider', binding.get('providerId')) if binding else None
+        if prov is not None and ASSURANCE_RANK.get(t.get('isolationAssurance'), 0) > ASSURANCE_RANK.get(prov.get('maxIsolationAssurance'), 0):
+            bad('SR-18', f'transfer[{i}].isolationAssurance', f'{t.get("isolationAssurance")} exceeds provider maximum {prov.get("maxIsolationAssurance")}')
+
+    # SR-19 a trial has no more runs than its budget allows
+    runs_per_trial = {}
+    for r in recs.get('run', []):
+        runs_per_trial[r.get('trialId')] = runs_per_trial.get(r.get('trialId'), 0) + 1
+    for i, tr in enumerate(recs.get('trial', [])):
+        limit = (tr.get('budget') or {}).get('maxRuns') if isinstance(tr.get('budget'), dict) else None
+        if isinstance(limit, int) and runs_per_trial.get(tr.get('trialId'), 0) > limit:
+            bad('SR-19', f'trial[{i}].budget.maxRuns', f'{runs_per_trial[tr.get("trialId")]} runs exceed the budget of {limit}')
+
+    # SR-20 a retry belongs to the same trial as the run it retries
+    for i, r in enumerate(recs.get('run', [])):
+        orig = idx.get('run', r.get('retryOfRunId'))
+        if orig is not None and orig.get('trialId') != r.get('trialId'):
+            bad('SR-20', f'run[{i}].retryOfRunId', 'retries a run of another trial')
+
+    # SR-21 the reserved system actor is a SYSTEM node and never fills a role
+    studio = idx.get('node', SYSTEM_ACTOR_ID)
+    if studio is not None and studio.get('kind') != 'SYSTEM':
+        bad('SR-21', 'node', f'{SYSTEM_ACTOR_ID} must be of kind SYSTEM')
+    for i, rt in enumerate(recs.get('route', [])):
+        for j, b in enumerate(rt.get('slotBindings') or []):
+            if isinstance(b, dict) and b.get('nodeId') == SYSTEM_ACTOR_ID:
+                bad('SR-21', f'route[{i}].slotBindings[{j}]', f'{SYSTEM_ACTOR_ID} cannot be bound to a role slot')
+    for i, m in enumerate(recs.get('runManifest', [])):
+        for j, a in enumerate(m.get('roleAssignments') or []):
+            if isinstance(a, dict) and a.get('nodeId') == SYSTEM_ACTOR_ID:
+                bad('SR-21', f'runManifest[{i}].roleAssignments[{j}]', f'{SYSTEM_ACTOR_ID} cannot be assigned a role')
+        for j, n in enumerate(m.get('nodes') or []):
+            if isinstance(n, dict) and n.get('nodeId') == SYSTEM_ACTOR_ID and n.get('kind') != 'SYSTEM':
+                bad('SR-21', f'runManifest[{i}].nodes[{j}]', f'frozen {SYSTEM_ACTOR_ID} must be of kind SYSTEM')
     return out
 
 

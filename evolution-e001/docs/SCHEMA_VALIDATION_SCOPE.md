@@ -61,6 +61,11 @@ JSON Schema では表せないレコード間の規則です。すべて `tests/
 | SR-14 | L1 Evaluation の評価者は SYSTEM の Node（AI の自己申告は L1 にならない） | §19 |
 | SR-15 | Trial・Route・Manifest の pattern / route / protocol / case の参照が一致 | §7, §9 |
 | SR-16 | Event・Gate・Evaluation の target（type と id の組）が実在 | §12, §20 |
+| SR-17 | Artifact の provenance（runId・caseId）が、その Transfer の Run、Run の Trial の Case と一致 | §9, §13（E001-D） |
+| SR-18 | Transfer の独立性の主張が、宛先に束縛された Provider の上限を超えない | §16（E001-D） |
+| SR-19 | 1つの Trial の Run 数が試行予算（budget.maxRuns）以下 | §7（E001-D） |
+| SR-20 | 再試行（retryOfRunId）は元の Run と同じ Trial に属する | §8（E001-D） |
+| SR-21 | `NODE-studio` は SYSTEM の Node で、役割の枠に束縛されない（Route・Manifest とも） | §4.3（E001-D、D-18） |
 
 ### 1.5 暫定の語彙（値の列挙は検証するが、意味は未確定）
 

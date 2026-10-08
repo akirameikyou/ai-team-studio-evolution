@@ -19,20 +19,20 @@ Tests（tests/unit/test_schema.py ほか）
 
 | E002 | Schema（`$defs`） | 意味規則 | 実装 | テスト（`test_schema.py`） |
 |---|---|---|---|---|
-| §4.1 Case | `case` | — | — | `test_every_required_field_is_enforced` ほか |
-| §4.2 Design Space | `designSpace` | — | — | required |
-| §4.3 Node | `node`（kind: HUMAN/MODEL/TOOL/RESOURCE/SYSTEM） | — | — | `test_role_cannot_be_used_as_node_kind` |
+| §4.1 Case | `case` | — | E001-D `application/execution_context.py`（create_case、作成時 Event に recordHash） | `test_every_required_field_is_enforced` ほか、`tests/integration/test_case_trial_run.py` |
+| §4.2 Design Space | `designSpace` | — | E001-D `application/execution_context.py` | required、`tests/integration/test_case_trial_run.py` |
+| §4.3 Node | `node`（kind: HUMAN/MODEL/TOOL/RESOURCE/SYSTEM） | — | E001-D `application/execution_context.py`（register_node、`NODE-studio` の予約） | `test_role_cannot_be_used_as_node_kind`、`test_case_trial_run.py` |
 | §4.4 Role | `role`（enum）、`pattern.slots[].role`、`runManifest.roleAssignments` | SR-13 | — | `test_sr13_*` |
-| §4.5 Provider | `provider`（kind: MANUAL_CLIPBOARD/MANUAL_FILE） | SR-02 | — | `test_future_provider_kind_is_rejected`、`test_sr02_*` |
-| §5 Pattern | `pattern`（topology PARALLEL/SEQUENTIAL、slots） | SR-11 | — | `test_same_core_holds_p001_and_p002` |
-| §6 Route | `route`（slotBindings、edges、patternRef、protocolRef） | SR-11, SR-12 | — | `test_sr11_*`、`test_sr12_*` |
-| §7 Trial | `trial` | SR-15 | — | `test_applied_experience_must_be_empty_in_e001`、`test_sr15_*` |
-| §8 Run | `run`（retryOfRunId） | SR-10 | — | `test_sr10_*` |
-| §9 Run Manifest | `runManifest` | SR-10, SR-13, SR-15 | — | `test_sr13_*`、`test_sr15_*` |
-| §10 Source | `source` | SR-03 | — | `test_sr03_*` |
+| §4.5 Provider | `provider`（kind: MANUAL_CLIPBOARD/MANUAL_FILE） | SR-02 | E001-D `application/execution_context.py`（register_provider） | `test_future_provider_kind_is_rejected`、`test_sr02_*`、`test_case_trial_run.py` |
+| §5 Pattern | `pattern`（topology PARALLEL/SEQUENTIAL、slots） | SR-11 | E001-D `application/execution_context.py`（記録の保存のみ。実行は E001-E） | `test_same_core_holds_p001_and_p002`、`tests/integration/test_p001_p002_records.py` |
+| §6 Route | `route`（slotBindings、edges、patternRef、protocolRef） | SR-11, SR-12 | E001-D `application/execution_context.py`（register_route：枠の網羅・edge の両端） | `test_sr11_*`、`test_sr12_*`、`test_p001_p002_records.py` |
+| §7 Trial | `trial` | SR-15 | E001-D `application/execution_context.py`（create_trial、予算） | `test_applied_experience_must_be_empty_in_e001`、`test_sr15_*`、`test_case_trial_run.py`、`test_sr19_*` |
+| §8 Run | `run`（retryOfRunId） | SR-10 | E001-D `application/execution_context.py`（start_run、状態は Event から導出） | `test_sr10_*`、`test_case_trial_run.py`、`test_sr20_*` |
+| §9 Run Manifest | `runManifest` | SR-10, SR-13, SR-15 | E001-D `application/execution_context.py`（Run 開始時に凍結、RUN_STARTED に manifestHash / recordHashes）、`application/provenance.py` reconstruct_run | `test_sr13_*`、`test_sr15_*`、`tests/integration/test_manifest_freeze.py` |
+| §10 Source | `source` | SR-03 | E001-D `application/execution_context.py`（register_source：状態は証拠から導出） | `test_sr03_*`、`test_case_trial_run.py` |
 | §11 Artifact / RAW | `artifact` | SR-01, SR-04 | E001-C `infrastructure/storage/artifact_store.py`（書き込み一回性・正確なバイト列の SHA-256・読み出し時の照合）、`integrity.py` | `test_sr04_*`、`test_duplicate_artifact_id`、`tests/persistence/test_artifact_store.py` |
 | §12 Event | `event` | SR-08, SR-16 | E001-C `infrastructure/storage/event_log.py`（1 Event = 1 ファイル、追記のみ、ARTIFACT_RECEIVED との接続） | `test_sr08_*`、`tests/persistence/test_artifact_event_link.py` |
-| §13 Transfer | `transfer`（edgeId、packetHash、externalDelivery、isolationAssurance） | SR-02, SR-05, SR-12 | — | `test_sr05_*`、`test_sr12_*` |
+| §13 Transfer | `transfer`（edgeId、packetHash、externalDelivery、isolationAssurance） | SR-02, SR-05, SR-12 | E001-D `application/execution_context.py`（record_transfer：記録のみ。パケットの組み立ては E001-F、Provider の流れは E001-G） | `test_sr05_*`、`test_sr12_*`、`tests/integration/test_provenance_chain.py`、`test_sr17_*`、`test_sr18_*` |
 | §14 Protocol | `protocol`（rules: subject/action/object/effect/condition、DENY 既定、DENY_OVERRIDES） | — | — | `test_protocol_default_must_be_deny`、`test_protocol_condition_is_a_closed_list` |
 | §15 Context Assembly | （Schema 上は transfer.artifactIds と packetHash） | SR-05 | E001-F | `test_isolation_secrets_appear_only_in_own_raw_response`（fixture の健全性のみ） |
 | §16 Independence Assurance | `isolationAssurance`（4段階） | SR-02 | — | `test_sr02_*` |
@@ -68,5 +68,10 @@ Tests（tests/unit/test_schema.py ほか）
 | D-15 | Event 種別は E002 の12種に `PROTOCOL_VIOLATION` と `SOURCE_REGISTERED` を追加 | AT-009（違反の記録）と §10 |
 | D-16 | Provider の将来種別（API / PROXY / LOCAL_LLM / CODE_EXECUTOR）は列挙に入れない。追加は Schema の版を上げて行う | E002 §4.5。未実装のものを受け付けないため |
 | D-17 | 版の方針：実データの正本運用が始まる前（E001-C より前）は、意味を明確にするための修正を `E001/1.0` のまま行う。既存データの解釈の変更、必須欄の変更、既存レコードとの非互換、Artifact / Source / Protocol の構造そのものの変更が必要になったときは、版の変更を Human Gate に戻す | E001-B Human Gate（2026-10-08） |
-| D-18 | `NODE-studio` を E001 の予約済みシステム記録者（system actor）とする。人間でも AI でも Provider でもなく、ArtifactStore / EventLog が行う保存操作を記録するための ID。E001-D で Node モデルとの整合を確認する | E001-C Human Gate（2026-10-08）I-8。`docs/STORAGE_E001-C.md` §8 |
+| D-18 | `NODE-studio` は E001 の予約済みシステム Node（kind SYSTEM）。**E001-D で定義を拡張：** Studio 自身が行う system-level operation（Artifact の保存、Event の記録、Context / パケットの送出）の主体。人間でも AI モデルでも Provider でも Role でもなく、観測者にはならない。Route の起点であることは「Studio が入力パケットを渡した」という運搬・システム操作の主体を意味し、「Studio が回答を生成した」ことは意味しない。パケットの作者は常に `NODE-studio` | E001-C Human Gate（I-8）、E001-D Human Gate（K-3, 2026-10-08）。`docs/EXECUTION_CONTEXT_E001-D.md` §7 |
 | D-19 | E001-C の判断 I-1〜I-7（trialId・providerId を Artifact に持たせない、UTF-8 以外は実装上の制約として拒否、contentType 見送り、`ARTIFACT_RECEIVED` を使用、`metadataHash` は Event Log の改ざん検出の鎖ではない、参照先の実在は bundle の検証で確認）。Schema は変更しない | E001-C Human Gate（2026-10-08）。`docs/STORAGE_E001-C.md` §11 |
+| D-20 | レコードは作成時の内容のまま書き換えない。現在の状態（Run の RUNNING / COMPLETED / FAILED）は Event から導く。snapshot は E001-D では実装しない | E001-D Human Gate K-2。E002 §22 |
+| D-21 | Manifest の凍結の時点は Run の開始時。Schema に開始前の Run の状態がないため「作成≈開始」とする **E001-D の制約**。PLANNED / READY 等が必要になれば Schema の変更として Human Gate へ | E001-D Human Gate K-4 |
+| D-22 | E001-D の範囲：Manifest の凍結に必要な Node・Provider・Pattern・Route・Protocol・DesignSpace・Source を「記録として保存する」まで含める。Transfer は記録の保存のみ。Pattern の実行（E）、Protocol の評価とパケットの組み立て（F）、Provider の流れ（G）は含めない | E001-D Human Gate K-1 |
+| D-23 | 既知の制約：作成時の Event がない記録（node・provider・pattern・route・protocol・designSpace）は、登録から Manifest の凍結（RUN_STARTED）までの間、Event による改ざんの証拠がない。E001-I の Event の鎖で強化する | E001-D Human Gate K-6 |
+| D-24 | 既知の制約：応答の Artifact の `provenance.transferId` は1つの Transfer しか指せない。複数の edge から入力を受ける Node（P002 の B など）のパケットの表し方は E001-F / G で決める | E001-D 実装時に判明 |

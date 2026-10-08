@@ -375,5 +375,52 @@ class SemanticRuleTests(Base):
         self.assertIssue(b, rule='SR-16', path='gate[0].targetId')
 
 
+class ExecutionContextRuleTests(Base):
+    """E001-D semantic rules SR-17..SR-21 (validator only; the schema JSON is unchanged)."""
+
+    def test_sr17_artifact_run_must_match_its_transfer(self):
+        b = bundle()
+        b['records']['run'].append(dict(copy.deepcopy(b['records']['run'][0]), runId='RUN-FIX-P001-2', runManifestId='MAN-FIX-P001-1'))
+        first(b, 'artifact', artifactId='ART-raw-a')['provenance']['runId'] = 'RUN-FIX-P001-2'
+        self.assertIssue(b, rule='SR-17', path='provenance.runId')
+
+    def test_sr17_artifact_case_must_match_its_trial(self):
+        b = bundle()
+        b['records']['case'].append(dict(copy.deepcopy(b['records']['case'][0]), caseId='CASE-FIX-002'))
+        a = first(b, 'artifact', artifactId='ART-raw-a')
+        a['provenance']['caseId'] = 'CASE-FIX-002'
+        self.assertIssue(b, rule='SR-17', path='provenance.caseId')
+
+    def test_sr18_transfer_cannot_exceed_provider_ceiling(self):
+        b = bundle()
+        b['records']['provider'][0]['maxIsolationAssurance'] = 'DECLARED'
+        b['records']['runManifest'][0]['providers'][0]['maxIsolationAssurance'] = 'DECLARED'
+        self.assertIssue(b, rule='SR-18', path='transfer[0].isolationAssurance')
+
+    def test_sr19_runs_within_budget(self):
+        b = bundle()
+        b['records']['trial'][0]['budget']['maxRuns'] = 1
+        b['records']['run'].append(dict(copy.deepcopy(b['records']['run'][0]), runId='RUN-FIX-P001-2'))
+        self.assertIssue(b, rule='SR-19', path='trial[0].budget.maxRuns')
+
+    def test_sr20_retry_stays_in_its_trial(self):
+        b = bundle()
+        b['records']['run'].append(dict(copy.deepcopy(b['records']['run'][0]), runId='RUN-FIX-P002-1',
+                                        trialId='TRIAL-FIX-P002', retryOfRunId='RUN-FIX-P001-1'))
+        self.assertIssue(b, rule='SR-20', path='run[1].retryOfRunId')
+
+    def test_sr21_system_actor_is_system(self):
+        b = bundle()
+        first(b, 'node', nodeId='NODE-studio')['kind'] = 'HUMAN'
+        self.assertIssue(b, rule='SR-21', path='node')
+
+    def test_sr21_system_actor_never_fills_a_role(self):
+        b = bundle()
+        b['records']['route'][0]['slotBindings'][0]['nodeId'] = 'NODE-studio'
+        b['records']['runManifest'][0]['roleAssignments'][0]['nodeId'] = 'NODE-studio'
+        self.assertIssue(b, rule='SR-21', path='route[0].slotBindings[0]')
+        self.assertIssue(b, rule='SR-21', path='runManifest[0].roleAssignments[0]')
+
+
 if __name__ == '__main__':
     unittest.main()

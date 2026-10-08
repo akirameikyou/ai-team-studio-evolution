@@ -96,6 +96,8 @@ NODE-studio
 
 `ArtifactStore` / `EventLog` 自身が書く Event の `actorNodeId` に使う、**E001 の予約済み ID** です。「Node がまだないので仮に入れた値」ではなく、E001-C の時点ですでに存在する特別な役割です。Schema 上は `node` レコード（kind `SYSTEM`）として登録されている必要があり、bundle の検証はそれがないと参照エラーにします（テスト済み）。E001-D で Node モデルを実装するときに、この予約 ID との整合を確認します。
 
+> **E001-D で定義を拡張しました**（D-18）：保存操作の記録者に加え、Studio 自身が行う system-level operation（Context / パケットの送出を含む）の主体です。詳細は `docs/EXECUTION_CONTEXT_E001-D.md` §7。
+
 ## 9. 書き出し・取り込み
 
 - **書き出し：** 検証済み・Event 付きの Artifact だけを、`payload.bin` と `artifact.json` のバイト列そのままで新しいフォルダに写し、`export.json`（各 Artifact の contentHash・metadataHash・byteSize）を添えます。空でないフォルダには書きません。
