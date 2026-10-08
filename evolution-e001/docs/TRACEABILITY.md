@@ -30,8 +30,8 @@ Tests（tests/unit/test_schema.py ほか）
 | §8 Run | `run`（retryOfRunId） | SR-10 | — | `test_sr10_*` |
 | §9 Run Manifest | `runManifest` | SR-10, SR-13, SR-15 | — | `test_sr13_*`、`test_sr15_*` |
 | §10 Source | `source` | SR-03 | — | `test_sr03_*` |
-| §11 Artifact / RAW | `artifact` | SR-01, SR-04 | — | `test_sr04_*`、`test_duplicate_artifact_id` |
-| §12 Event | `event` | SR-08, SR-16 | — | `test_sr08_*` |
+| §11 Artifact / RAW | `artifact` | SR-01, SR-04 | E001-C `infrastructure/storage/artifact_store.py`（書き込み一回性・正確なバイト列の SHA-256・読み出し時の照合）、`integrity.py` | `test_sr04_*`、`test_duplicate_artifact_id`、`tests/persistence/test_artifact_store.py` |
+| §12 Event | `event` | SR-08, SR-16 | E001-C `infrastructure/storage/event_log.py`（1 Event = 1 ファイル、追記のみ、ARTIFACT_RECEIVED との接続） | `test_sr08_*`、`tests/persistence/test_artifact_event_link.py` |
 | §13 Transfer | `transfer`（edgeId、packetHash、externalDelivery、isolationAssurance） | SR-02, SR-05, SR-12 | — | `test_sr05_*`、`test_sr12_*` |
 | §14 Protocol | `protocol`（rules: subject/action/object/effect/condition、DENY 既定、DENY_OVERRIDES） | — | — | `test_protocol_default_must_be_deny`、`test_protocol_condition_is_a_closed_list` |
 | §15 Context Assembly | （Schema 上は transfer.artifactIds と packetHash） | SR-05 | E001-F | `test_isolation_secrets_appear_only_in_own_raw_response`（fixture の健全性のみ） |
@@ -41,7 +41,7 @@ Tests（tests/unit/test_schema.py ほか）
 | §19 Evaluation | `evaluation`（L1 のみ） | SR-14 | — | `test_sr14_*` |
 | §20 Human Gate | `gate`（targetType/targetId/targetContentHash） | SR-09, SR-16 | — | `test_sr09_*`、`test_sr16_*` |
 | §21 Reflection / Experience | 定義しない（E001 の対象外）。`trial.appliedExperienceIds` は空のみ | — | — | `test_unknown_record_set_is_rejected`、`test_applied_experience_must_be_empty_in_e001` |
-| §22 Persistence | bundle は検証・書き出し用のまとまりであり、保存の正本ではない | — | E001-C, E001-I | — |
+| §22 Persistence | bundle は検証・書き出し用のまとまりであり、保存の正本ではない | — | E001-C：Artifact / Event のファイル保存と Artifact の書き出し・取り込み（`docs/STORAGE_E001-C.md`）。全体の書き出しは E001-I | `tests/persistence/`（3ファイル） |
 | §25 Testing（Persistence: unknown version） | `schemaVersion` const | — | validator | `VersionTests` |
 | §26 Migration | 定義しない（E001-B では移行しない） | — | — | — |
 
@@ -68,3 +68,5 @@ Tests（tests/unit/test_schema.py ほか）
 | D-15 | Event 種別は E002 の12種に `PROTOCOL_VIOLATION` と `SOURCE_REGISTERED` を追加 | AT-009（違反の記録）と §10 |
 | D-16 | Provider の将来種別（API / PROXY / LOCAL_LLM / CODE_EXECUTOR）は列挙に入れない。追加は Schema の版を上げて行う | E002 §4.5。未実装のものを受け付けないため |
 | D-17 | 版の方針：実データの正本運用が始まる前（E001-C より前）は、意味を明確にするための修正を `E001/1.0` のまま行う。既存データの解釈の変更、必須欄の変更、既存レコードとの非互換、Artifact / Source / Protocol の構造そのものの変更が必要になったときは、版の変更を Human Gate に戻す | E001-B Human Gate（2026-10-08） |
+| D-18 | `NODE-studio` を E001 の予約済みシステム記録者（system actor）とする。人間でも AI でも Provider でもなく、ArtifactStore / EventLog が行う保存操作を記録するための ID。E001-D で Node モデルとの整合を確認する | E001-C Human Gate（2026-10-08）I-8。`docs/STORAGE_E001-C.md` §8 |
+| D-19 | E001-C の判断 I-1〜I-7（trialId・providerId を Artifact に持たせない、UTF-8 以外は実装上の制約として拒否、contentType 見送り、`ARTIFACT_RECEIVED` を使用、`metadataHash` は Event Log の改ざん検出の鎖ではない、参照先の実在は bundle の検証で確認）。Schema は変更しない | E001-C Human Gate（2026-10-08）。`docs/STORAGE_E001-C.md` §11 |

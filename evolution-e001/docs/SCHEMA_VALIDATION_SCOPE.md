@@ -74,8 +74,8 @@ JSON Schema では表せないレコード間の規則です。すべて `tests/
 | 項目 | 理由・担当フェーズ |
 |---|---|
 | JSON Schema の他のキーワード（`oneOf` `anyOf` `if` `patternProperties` `uniqueItems` 等） | 使わない。使うと読み込みエラー |
-| `contentLocation` の実ファイルのハッシュ | 保存層が必要。E001-C |
-| Artifact の書き込み一回性（上書き拒否） | 保存層の性質。E001-C |
+| `contentLocation` の実ファイルのハッシュ | Schema 検証器ではなく保存層（E001-C `ArtifactStore`）が照合する。`docs/STORAGE_E001-C.md` |
+| Artifact の書き込み一回性（上書き拒否） | 保存層の性質。E001-C `ArtifactStore` で実装・テスト済み |
 | Event の追記のみ性（過去の Event の改変検出） | 保存層。E001-I |
 | Protocol ルールの評価そのもの（誰の packet に何が入るか） | E001-F（Context Assembly） |
 | Transfer.artifactIds が Protocol に照らして許可されているか | E001-F |

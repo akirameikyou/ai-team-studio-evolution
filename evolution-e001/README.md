@@ -2,7 +2,7 @@
 
 Accepted Specification E002 に基づく E001 の実装場所です。既存の Studio（Lite、Operational 001、Integrated 002、Prototype 001）からは独立しています。既存のコードとデータには触れません。
 
-**現在の段階：E001-B（仕様・Schema・検証基盤の固定）。** アプリとしてはまだ動きません。
+**現在の段階：E001-C（Artifact / RAW の書き込み一回性ストレージ）。** E001-B で Schema と検証器を固定し、E001-C で受け取ったバイト列をそのまま保存・照合する層を作りました。画面やサーバーはまだありません。
 
 ## E001 の制約
 
@@ -18,13 +18,15 @@ Accepted Specification E002 に基づく E001 の実装場所です。既存の 
 ```
 evolution-e001/
   domain/schema/        正式 E001 Schema と検証器（E001-B）
-  tests/unit/           単体テスト
+  infrastructure/storage/  Artifact / Event のファイル保存（E001-C）
+  tests/unit/           単体テスト（Schema・文書）
+  tests/persistence/    保存層のテスト（書き込み一回性・破損検出・Event 接続・書き出し/取り込み）
   tests/fixtures/       非機密のテストデータ（Git 管理。SECRET-A/B/C を含む）
   docs/                 仕様書（無改変）・旧 Schema（参考）・SHA256SUMS・BASELINE・TRACEABILITY・検証範囲
   data/                 実際の CASE データ（Git 管理外）
 ```
 
-`application/`、`infrastructure/`、`ui/` は、それぞれのフェーズで作ります。
+`application/` と `ui/` は、それぞれのフェーズで作ります。
 
 ## 文書
 
@@ -37,6 +39,7 @@ evolution-e001/
 | [docs/BASELINE_E001-A.md](docs/BASELINE_E001-A.md) | 着手時点のリポジトリと環境 |
 | [docs/TRACEABILITY.md](docs/TRACEABILITY.md) | E002 → Schema → 実装 → テストの対応と、設計判断 |
 | [docs/SCHEMA_VALIDATION_SCOPE.md](docs/SCHEMA_VALIDATION_SCOPE.md) | 検証器が検証するもの・しないもの |
+| [docs/STORAGE_E001-C.md](docs/STORAGE_E001-C.md) | 保存の構成、書き込み一回性、ハッシュ、検出できる破損、保証しないこと |
 
 ## テスト
 
