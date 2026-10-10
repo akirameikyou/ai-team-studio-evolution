@@ -24,8 +24,8 @@ Tests（tests/unit/test_schema.py ほか）
 | §4.3 Node | `node`（kind: HUMAN/MODEL/TOOL/RESOURCE/SYSTEM） | — | E001-D `application/execution_context.py`（register_node、`NODE-studio` の予約） | `test_role_cannot_be_used_as_node_kind`、`test_case_trial_run.py` |
 | §4.4 Role | `role`（enum）、`pattern.slots[].role`、`runManifest.roleAssignments` | SR-13 | — | `test_sr13_*` |
 | §4.5 Provider | `provider`（kind: MANUAL_CLIPBOARD/MANUAL_FILE） | SR-02 | E001-D `application/execution_context.py`（register_provider） | `test_future_provider_kind_is_rejected`、`test_sr02_*`、`test_case_trial_run.py` |
-| §5 Pattern | `pattern`（topology PARALLEL/SEQUENTIAL、slots） | SR-11 | E001-D `application/execution_context.py`（記録の保存のみ。実行は E001-E） | `test_same_core_holds_p001_and_p002`、`tests/integration/test_p001_p002_records.py` |
-| §6 Route | `route`（slotBindings、edges、patternRef、protocolRef） | SR-11, SR-12 | E001-D `application/execution_context.py`（register_route：枠の網羅・edge の両端） | `test_sr11_*`、`test_sr12_*`、`test_p001_p002_records.py` |
+| §5 Pattern | `pattern`（topology PARALLEL/SEQUENTIAL、slots） | SR-11 | E001-D `application/execution_context.py`（記録の保存）。E001-E の完了範囲は記録・区別・検証まで（D-25）。Pattern の実行は E001-F / G | `test_same_core_holds_p001_and_p002`、`tests/integration/test_p001_p002_records.py` |
+| §6 Route | `route`（slotBindings、edges、patternRef、protocolRef） | SR-11, SR-12 | E001-D `application/execution_context.py`（register_route：枠の網羅・edge の両端）。edge の `allowedArtifactKinds` は `record_transfer` で強制する。edge の `order` は記録するだけで、順序に沿った進行の強制は E001-F / G（D-25） | `test_sr11_*`、`test_sr12_*`、`test_p001_p002_records.py` |
 | §7 Trial | `trial` | SR-15 | E001-D `application/execution_context.py`（create_trial、予算） | `test_applied_experience_must_be_empty_in_e001`、`test_sr15_*`、`test_case_trial_run.py`、`test_sr19_*` |
 | §8 Run | `run`（retryOfRunId） | SR-10 | E001-D `application/execution_context.py`（start_run、状態は Event から導出） | `test_sr10_*`、`test_case_trial_run.py`、`test_sr20_*` |
 | §9 Run Manifest | `runManifest` | SR-10, SR-13, SR-15 | E001-D `application/execution_context.py`（Run 開始時に凍結、RUN_STARTED に manifestHash / recordHashes）、`application/provenance.py` reconstruct_run | `test_sr13_*`、`test_sr15_*`、`tests/integration/test_manifest_freeze.py` |
@@ -72,15 +72,16 @@ Tests（tests/unit/test_schema.py ほか）
 | D-19 | E001-C の判断 I-1〜I-7（trialId・providerId を Artifact に持たせない、UTF-8 以外は実装上の制約として拒否、contentType 見送り、`ARTIFACT_RECEIVED` を使用、`metadataHash` は Event Log の改ざん検出の鎖ではない、参照先の実在は bundle の検証で確認）。Schema は変更しない | E001-C Human Gate（2026-10-08）。`docs/STORAGE_E001-C.md` §11 |
 | D-20 | レコードは作成時の内容のまま書き換えない。現在の状態（Run の RUNNING / COMPLETED / FAILED）は Event から導く。snapshot は E001-D では実装しない | E001-D Human Gate K-2。E002 §22 |
 | D-21 | Manifest の凍結の時点は Run の開始時。Schema に開始前の Run の状態がないため「作成≈開始」とする **E001-D の制約**。PLANNED / READY 等が必要になれば Schema の変更として Human Gate へ | E001-D Human Gate K-4 |
-| D-22 | E001-D の範囲：Manifest の凍結に必要な Node・Provider・Pattern・Route・Protocol・DesignSpace・Source を「記録として保存する」まで含める。Transfer は記録の保存のみ。Pattern の実行（E）、Protocol の評価とパケットの組み立て（F）、Provider の流れ（G）は含めない | E001-D Human Gate K-1 |
+| D-22 | E001-D の範囲：Manifest の凍結に必要な Node・Provider・Pattern・Route・Protocol・DesignSpace・Source を「記録として保存する」まで含める。Transfer は記録の保存のみ。Pattern の実行（E）、Protocol の評価とパケットの組み立て（F）、Provider の流れ（G）は含めない。**ここでいう「Pattern の実行（E）」の担当は D-25 で E001-F / G に移した** | E001-D Human Gate K-1 |
 | D-23 | 既知の制約：作成時の Event がない記録（node・provider・pattern・route・protocol・designSpace）は、登録から Manifest の凍結（RUN_STARTED）までの間、Event による改ざんの証拠がない。E001-I の Event の鎖で強化する | E001-D Human Gate K-6 |
 | D-24 | 既知の制約：応答の Artifact の `provenance.transferId` は1つの Transfer しか指せない。複数の edge から入力を受ける Node（P002 の B など）のパケットの表し方は E001-F / G で決める | E001-D 実装時に判明 |
+| D-25 | **E001-E の完了範囲（実装工程上の責務分担。E002 は変更しない）：** Pattern（P001 / P002）と Route の記録・区別・検証まで。中身は、同じ Core で P001 と P002 を表すこと、SR-11（slot の網羅と edge の両端）、SR-12（Transfer が Route の edge に従うこと）、Trial と Route の一致、Route と Transfer が別の記録であること、edge の `allowedArtifactKinds` を `record_transfer` で強制すること。これらは E001-D の時点の実装とテストで満たされているため、**E001-E は完了とする**。後続工程の責務とするもの：Pattern の実行（edge の `order` に沿った進行の強制を含む）と、パケットの組み立てと意味づけ（E002 §6 の「packet semantics」のうち、`allowedArtifactKinds` を超える部分）は E001-F（Context Assembly）と E001-G（Provider の流れ）。E001-F1/U1・U2 の成果は E001-E の完了の根拠にしない。**E001-E の完了は E001 全体の完了ではない。** AT-001・AT-007 の受け入れ判定は E001-J で行う | 2段階の判断。① 2026-10-09 の Human Gate：E-5 について E-c を承認（E001-E は完了扱いにせず保留し、U1 を E001-F の準備として先に進める）。② 2026-10-10 の判断：E-b を採用し、①の保留を解除して E001-E の完了範囲を確定した。①の「U1 を先に進める」部分はすでに実施済みで、②によって取り消されるものではない |
 
 ## 3. Protocol の RECEIVE の評価の意味（E001-F1/U1）
 
 実装：`domain/protocol/evaluator.py`（純粋な関数）。テスト：`tests/unit/test_protocol_evaluator.py`。根拠：Human Gate 003〜005（2026-10-09）で承認された方向性（G-S S1、G-A1 D、G-A2、G-A4、G-A5 A5-1、G-A6、E-1、E-2、E-3）。
 
-**範囲：** U1 は、与えられた文脈に対して、1つの Artifact を1つの宛先へのパケットに入れてよいかを判定するだけです。パケットの組み立て、候補の収集、出所の一貫性の確認、`record_transfer` での強制、Event の記録は、まだ実装していません（U2 以降。G-B・G-C1・G-C2・G-A3・G-D・G-E・G-F は未承認）。U1 は E001-F の準備として先に実装したもので、**E001-E の完了を意味しません**（E001-E は未完了のまま。E-5 の E-c）。
+**範囲：** U1 は、与えられた文脈に対して、1つの Artifact を1つの宛先へのパケットに入れてよいかを判定するだけです。パケットのバイト形式と Artifact の並び順は U2 で実装しました（`domain/protocol/packet.py`。形式の変換と検査だけで、Artifact の選択はしません）。パケットに入れる Artifact の選択と組み立て、候補の収集、出所の一貫性の確認、`record_transfer` での強制、Event の記録は、まだ実装していません（U3 以降。G-B・G-C1・G-C2・G-A3・G-D・G-E・G-F は未承認）。U1 は E001-F の準備として先に実装したもので、**E001-E の完了の根拠ではありません**。E001-E は、E-5 の E-c（2026-10-09）ではいったん未完了のまま保留しましたが、その後 E-b の採用（D-25）により、E001-D の時点の実装とテストで完了としました。
 
 **入力：** Protocol のレコード、Run の文脈（参加 Node とその役割の集合［Manifest の roleAssignments］、SYSTEM の Node の集合［Manifest の nodes］、凍結した Route の edge）、宛先の Node、今回送る edge、Artifact（ID・種類・作者）。
 

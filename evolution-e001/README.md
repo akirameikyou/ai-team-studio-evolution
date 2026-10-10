@@ -2,7 +2,7 @@
 
 Accepted Specification E002 に基づく E001 の実装場所です。既存の Studio（Lite、Operational 001、Integrated 002、Prototype 001）からは独立しています。既存のコードとデータには触れません。
 
-**現在の段階：E001-D（実行の文脈の記録）。** E001-B で Schema と検証器、E001-C で受け取ったバイト列をそのまま保存する層、E001-D で Case / Trial / Run / 凍結した Run Manifest / Transfer の記録と出所の追跡を作りました。画面やサーバーはまだありません。
+**現在の段階：E001-F（Protocol と Context Assembly）。** E001-B で Schema と検証器、E001-C で受け取ったバイト列をそのまま保存する層、E001-D で Case / Trial / Run / 凍結した Run Manifest / Transfer の記録と出所の追跡を作りました。E001-E は Pattern と Route の記録・区別・検証の範囲で完了としています（`docs/TRACEABILITY.md` の D-25）。E001-F では、Protocol の RECEIVE の評価（F1/U1）とパケットの形式（F1/U2）を作りました。E001-E と E001-F の一部が終わっても、E001 全体の完了ではありません。画面やサーバーはまだありません。
 
 ## E001 の制約
 
