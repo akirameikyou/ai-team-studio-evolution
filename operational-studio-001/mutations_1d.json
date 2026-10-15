@@ -1,0 +1,83 @@
+{
+ "about": "studio_text.js に意図的な不具合を1つずつ入れ、test_1d_cases.js が不合格を出すか確かめる。mutation_1d.html で再実行できる。",
+ "mutants": [
+  {
+   "id": "T-01",
+   "name": "問いでもファイル名だけの記述を取り出す",
+   "find": "const bareNames = !opts || opts.bareNames !== false;",
+   "replace": "const bareNames = true;"
+  },
+  {
+   "id": "T-02",
+   "name": "URL を日本語の手前で止めない",
+   "find": "\\u0080-\\uffff]+/g",
+   "replace": "]+/g"
+  },
+  {
+   "id": "T-03",
+   "name": "絶対パスや URL に含まれるファイル名を二重に登録する",
+   "find": "if (![...seen].some(r => r.includes(m[0]))) add('ファイル', m[0]);",
+   "replace": "add('ファイル', m[0]);"
+  },
+  {
+   "id": "T-04",
+   "name": "知らない層があっても1行を自動分割する",
+   "find": "if (auto && !marks.every(m => LAYERS.includes(m[1].toUpperCase())))",
+   "replace": "if (false)"
+  },
+  {
+   "id": "T-05",
+   "name": "最後の層の後ろの文を捨てる",
+   "find": "if (rest) out.push(",
+   "replace": "if (false) out.push("
+  },
+  {
+   "id": "T-06",
+   "name": "空の項目を（内容なし）にしない",
+   "find": "text: seg || '（内容なし）'",
+   "replace": "text: seg"
+  },
+  {
+   "id": "T-07",
+   "name": "項目の先頭の DIFFERENCES: を除かない",
+   "find": "const seg = piece.slice(pos, m.index).replace(LABEL, '').trim();",
+   "replace": "const seg = piece.slice(pos, m.index).trim();"
+  },
+  {
+   "id": "T-08",
+   "name": "自動分割の印を付けない",
+   "find": "const auto = marks.length > 1;",
+   "replace": "const auto = false;"
+  },
+  {
+   "id": "T-09",
+   "name": "ORIGIN の大文字小文字を区別する",
+   "find": "const MARK = /\\|\\s*ORIGIN\\s*:\\s*([A-Za-z0-9_-]+)/gi;",
+   "replace": "const MARK = /\\|\\s*ORIGIN\\s*:\\s*([A-Za-z0-9_-]+)/g;"
+  },
+  {
+   "id": "T-10",
+   "name": "申告ハッシュを最後の資料に付ける",
+   "find": "if (hashes.length && out.length) out[0].claimedHash = hashes[0];",
+   "replace": "if (hashes.length && out.length) out[out.length - 1].claimedHash = hashes[0];"
+  },
+  {
+   "id": "T-12",
+   "name": "層名を英字だけで読む（SOURCE2 を SOURCE と誤認）",
+   "find": "([A-Za-z0-9_-]+)/gi;",
+   "replace": "([A-Za-z]+)/gi;"
+  },
+  {
+   "id": "T-13",
+   "name": "URL を ASCII の開き括弧で切らない",
+   "find": "'）()」",
+   "replace": "'）)」"
+  },
+  {
+   "id": "T-11",
+   "name": "GitHub の URL を種類 URL にする",
+   "find": "add(/github(usercontent)?\\.com/.test(m[0]) ? 'GitHub' : 'URL',",
+   "replace": "add('URL',"
+  }
+ ]
+}

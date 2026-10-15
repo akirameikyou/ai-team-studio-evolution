@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="ja">
+<head><meta charset="utf-8"><title>stage 1d text tests</title></head>
+<body>
+<h1>段階1d-A 文字列処理の試験（studio_text.js）</h1>
+<p>問いからの資料の取り出し（1d-1）と、相違点の項目分け（1d-2）を試験データで確かめる。画面・保存・通信なし。</p>
+<pre id="out">running…</pre>
+<script src="studio_text.js"></script>
+<script src="test_1d_cases.js"></script>
+<script>
+'use strict';
+const results = run1d(StudioText);
+const pass = results.filter(r => r.ok).length;
+const out = { total: results.length, pass, fail: results.length - pass, failures: results.filter(r => !r.ok), tests: [...new Set(results.map(r => r.test))].map(n => ({ test: n, checks: results.filter(r => r.test === n).length, fail: results.filter(r => r.test === n && !r.ok).length })) };
+window.__T1D__ = out;
+document.getElementById('out').textContent = JSON.stringify(out, null, 2);
+</script>
+</body>
+</html>

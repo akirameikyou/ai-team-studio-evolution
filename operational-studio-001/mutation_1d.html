@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ja">
+<head><meta charset="utf-8"><title>stage 1d mutation runner</title></head>
+<body>
+<h1>段階1d-A 不具合注入（mutations_1d.json）</h1>
+<p>studio_text.js の文字列に置き換えを1つずつ加え、test_1d_cases.js を実行する。不合格が1件以上なら KILLED、0件なら SURVIVED。find が1回だけ現れなければ PATTERN_ERROR。</p>
+<pre id="out">running…</pre>
+<script src="test_1d_cases.js"></script>
+<script>
+'use strict';
+const text = async p => { const r = await fetch(p, { cache: 'no-store' }); if (!r.ok) throw new Error(p + ' HTTP ' + r.status); return r.text(); };
+const sha256 = async s => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)))].map(x => x.toString(16).padStart(2, '0')).join('');
+const load = src => { const g = {}; new Function('globalThis', src)(g); return g.StudioText; };
+(async () => {
+  const out = { startedAt: new Date().toISOString() };
+  try {
+    const [src, mutText, casesSrc] = await Promise.all([text('studio_text.js'), text('mutations_1d.json'), text('test_1d_cases.js')]);
+    out.files = { studio_text: await sha256(src), mutations_1d: await sha256(mutText), test_1d_cases: await sha256(casesSrc) };
+    const base = run1d(load(src)); out.baseline = { total: base.length, fail: base.filter(r => !r.ok).length };
+    out.mutants = JSON.parse(mutText).mutants.map(m => {
+      const n = src.split(m.find).length - 1;
+      if (n !== 1) return { id: m.id, name: m.name, result: 'PATTERN_ERROR', occurrences: n };
+      let r; try { r = run1d(load(src.replace(m.find, () => m.replace))); } catch (e) { return { id: m.id, name: m.name, result: 'KILLED', note: 'load error ' + e }; }
+      const f = r.filter(x => !x.ok);
+      return { id: m.id, name: m.name, result: f.length ? 'KILLED' : 'SURVIVED', failing: [...new Set(f.map(x => x.test.split(' ')[0]))] };
+    });
+    out.summary = { killed: out.mutants.filter(m => m.result === 'KILLED').length, survived: out.mutants.filter(m => m.result === 'SURVIVED').length, patternErrors: out.mutants.filter(m => m.result === 'PATTERN_ERROR').length, total: out.mutants.length };
+  } catch (e) { out.error = String(e); }
+  out.finishedAt = new Date().toISOString();
+  window.__MUT1D__ = out;
+  document.getElementById('out').textContent = JSON.stringify(out, null, 2);
+})();
+</script>
+</body>
+</html>

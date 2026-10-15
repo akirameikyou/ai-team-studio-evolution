@@ -7,9 +7,6 @@ const KEY = 'ats-operational-001';
 const STAGES = [['CASE', '問い'], ['SOURCE', '資料'], ['OBSERVE', '観測'], ['DIFFERENCE', '差分'], ['SYNTHESIS', '統合'], ['GATE', '判断'], ['NEXT', '次へ']];
 const ACCESS = ['DIRECT', 'READABLE', 'INACCESSIBLE', 'UNKNOWN'];
 const ORIGINS = ['SOURCE', 'CONTEXT', 'STATE', 'OBSERVER', 'EVIDENCE', 'REASONING', 'JUDGMENT'];
-const RESULT_KEYS = ['CASE', 'TASK', 'FROM', 'SOURCE_ACCESS', 'CONDITION', 'OBSERVATION', 'EVIDENCE', 'UNKNOWN'];
-const SYNTH_KEYS = ['CASE', 'TASK', 'FROM', 'COMMON', 'DIFFERENCES', 'UNKNOWN', 'HOLD', 'EXECUTION_NEEDS', 'NEXT_TASK', 'GATE_QUESTION'];
-const DONE_KEYS = ['CASE', 'TASK', 'FROM', 'CHANGED', 'VERIFIED', 'UNKNOWN', 'NEXT'];
 const DEFAULT_OBSERVERS = [
   { name: 'GPT', connector: 'manual', route: 'api:openai' },
   { name: 'Claude Code', connector: 'manual', route: 'agent' },
@@ -67,19 +64,9 @@ function newCaseId() {
   let n = 1; while (store.cases[`CASE-${ymd}-${String(n).padStart(3, '0')}`]) n++;
   return `CASE-${ymd}-${String(n).padStart(3, '0')}`;
 }
-function extractSources(text) {
-  const out = []; const seen = new Set();
-  const add = (kind, ref) => { if (seen.has(ref)) return; seen.add(ref); out.push({ id: 'S' + (out.length + 1), kind, ref, claimedHash: null, verified: null, access: {} }); };
-  for (const m of text.matchAll(/https?:\/\/[^\s<>"'）)」]+/g)) add(/github(usercontent)?\.com/.test(m[0]) ? 'GitHub' : 'URL', m[0].replace(/[。、.,]+$/, ''));
-  for (const m of text.matchAll(/[A-Za-z]:\\[^\s"'<>|]+/g)) add('ファイル', m[0]);
-  for (const m of text.matchAll(/\b[\w.-]+\.(zip|pdf|md|json|html|csv|txt|docx|xlsx)\b/gi)) if (![...seen].some(r => r.includes(m[0]))) add('ファイル', m[0]);
-  const hashes = [...text.matchAll(/\b[0-9a-f]{64}\b/gi)].map(m => m[0].toLowerCase());
-  if (hashes.length && out.length) out[0].claimedHash = hashes[0];
-  return out;
-}
 function createCase(question, observerNames) {
   const c = {
-    id: newCaseId(), question: question.trim(), createdAt: now(), sources: extractSources(question),
+    id: newCaseId(), question: question.trim(), createdAt: now(), sources: StudioText.extractSources(question, { bareNames: false }),   // 1d-1: file names in the question are not SOURCEs
     observers: observerNames, tasks: {}, synthesis: null, gate: null, gateHistory: [], next: null,
     metrics: { typed: 1 }, log: []
   };
@@ -185,32 +172,6 @@ function nextPacket(c, name, task) {
 }
 const oneLine = s => String(s || '').replace(/\s+/g, ' ').trim().slice(0, 200);
 
-// ---------- parsing (tolerant: full-width marks, joined lines, lowercase) ----------
-function parseBlock(text, tag, keys) {
-  const t = String(text || '').replace(/［/g, '[').replace(/］/g, ']').replace(/：/g, ':');
-  // Use the last block: AIs often mention "[STUDIO_RESULT]" in prose or quote the template before their real answer.
-  const lower = t.toLowerCase(), open = '[' + tag.toLowerCase() + ']', close = '[/' + tag.toLowerCase() + ']';
-  const end = lower.lastIndexOf(close), start = lower.lastIndexOf(open, end < 0 ? lower.length : end);
-  if (start < 0) return null;
-  const body = t.slice(start + open.length, end > start ? end : t.length);
-  // Keys are expected in template order, but AIs join or re-wrap lines freely. Walk the keys in order and take each one's
-  // first occurrence after the previous key, preferring a line-start occurrence; text between keys (even "OBSERVATION:"
-  // inside a value) stays in the value. Keys an AI wrote out of order are then picked up from line starts.
-  const find = (k, from, lineOnly) => { const re = new RegExp((lineOnly ? '(?:^|\\n)[ \\t]*' : '(?:^|\\s)') + '(' + k + ')\\s*:', 'gi'); re.lastIndex = from;
-    const h = re.exec(body); return h ? { k, a: h.index, s: h.index + h[0].length } : null; };
-  const hits = []; let pos = 0;
-  const anyKey = new RegExp('(?:^|\\s)(' + keys.join('|') + ')\\s*:', 'i');
-  for (const k of keys) {
-    const inl = find(k, pos, false), line = find(k, pos, true);
-    // A later line-start occurrence wins over an inline one only if no other key sits between them (then the inline one was a mention).
-    const pick = line && inl && line.a > inl.a && !anyKey.test(body.slice(inl.s, line.a)) ? line : inl;
-    if (pick) { hits.push(pick); pos = pick.s; }
-  }
-  for (const k of keys) if (!hits.some(x => x.k === k)) { const h = find(k, 0, true); if (h && !hits.some(x => h.a >= x.a && h.a < x.s)) hits.push(h); }
-  hits.sort((x, y) => x.a - y.a);
-  const f = {}; hits.forEach((x, i) => { if (!(x.k in f)) f[x.k] = body.slice(x.s, i + 1 < hits.length ? hits[i + 1].a : body.length).trim(); });
-  return { fields: f, missing: keys.filter(k => !(k in f)) };
-}
 function parseAccess(v) {
   const out = {}; for (const m of String(v || '').matchAll(/(S\d+)\s*=\s*([A-Za-z]+)([^,、]*)/g)) {
     const st = m[2].toUpperCase(); out[m[1]] = { status: ACCESS.includes(st) ? st : 'UNKNOWN', note: m[3].trim().replace(/^[（(]|[)）]$/g, '') };
@@ -537,9 +498,9 @@ function autoDifferences(c) {
     if (st.length > 1) out.push({ text: `${s.id} の読めた状態がAIによって違う（${acc.map(([n, a]) => n + '=' + a.status).join('、')}）`, origin: 'OBSERVER', by: 'Studio（自動検出）' }); }
   const fmt = names.filter(n => c.tasks[n].result.format === '形式外');
   if (fmt.length) out.push({ text: `${fmt.join('、')} の回答は形式外のため、項目ごとの比較ができない`, origin: 'STATE', by: 'Studio（自動検出）' });
-  if (c.synthesis && !StudioState.synthesisStale(c) && c.synthesis.fields.DIFFERENCES) for (const line of c.synthesis.fields.DIFFERENCES.split(/\n|(?=- )/).map(x => x.replace(/^[-・\s]+/, '').trim()).filter(Boolean)) {
-    const m = line.match(/(.*?)\|\s*ORIGIN\s*:\s*([A-Za-z]+)/i); out.push({ text: m ? m[1].trim() : line, origin: m ? m[2].toUpperCase() : '未分類', by: c.synthesis.by });
-  }
+  // 1d-2: display only. Items split inside one line (the reply lost its line breaks) are marked; the stored synthesis is unchanged.
+  if (c.synthesis && !StudioState.synthesisStale(c) && c.synthesis.fields.DIFFERENCES) for (const d of StudioText.splitDifferences(c.synthesis.fields.DIFFERENCES))
+    out.push({ text: d.text, origin: d.origin, by: c.synthesis.by + (d.auto ? '・自動分割（改行なし）' : '') });
   return out;
 }
 function renderDifference(c) {
@@ -613,7 +574,8 @@ function bind() {
   $('pasteBox').addEventListener('dragover', e => e.preventDefault());
   $('pasteBox').addEventListener('drop', async e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) doPaste(await f.text(), 'ファイル'); });
   $('srcAddBtn').onclick = () => { const c = cur(), v = $('srcAdd').value.trim(); if (!v) return;
-    const found = extractSources(v); const list = found.length ? found : [{ id: '', kind: 'テキスト', ref: v, claimedHash: null, verified: null, access: {} }];
+    // Typed by a person into "add SOURCE": bare file names are registered too (1d-1).
+    const found = StudioText.extractSources(v); const list = found.length ? found : [{ id: '', kind: 'テキスト', ref: v, claimedHash: null, verified: null, access: {} }];
     // Skip anything already registered, so the same file or URL never becomes two SOURCEs.
     const known = new Set(c.sources.map(x => x.ref.trim().toLowerCase())), skipped = [];
     for (const s of list) { if (known.has(s.ref.trim().toLowerCase())) { skipped.push(s.ref); continue; } known.add(s.ref.trim().toLowerCase());
