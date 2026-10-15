@@ -113,6 +113,19 @@ test('Q-07 JSON の書き出しと読み込み', () => {
   check(snap(c) === snap(back), '依頼記録・送付状態・送り直し可否が一致 ' + snap(back));
 });
 
+test('Q-08 送付の記録に経路と中継が書いたファイルの場所を残す（段階1d-B、Codex C51 で追加）', () => {
+  const c = newCase(); const r = rec(c, 'OBS', 'GPT', 'CASE-T-OBS-GPT', 1, 'P');
+  S.recordDelivery(c, r.requestId, { at: t(), status: 'queued', connector: 'proxy', route: 'agent', toFile: 'C:\\ex\\CASE-T\\CASE-T-OBS-GPT\\to-GPT.md', fromFile: 'C:\\ex\\CASE-T\\CASE-T-OBS-GPT\\from-GPT.md' });
+  const d = r.deliveries[0];
+  check(d.route === 'agent' && d.toFile === 'C:\\ex\\CASE-T\\CASE-T-OBS-GPT\\to-GPT.md' && d.fromFile.endsWith('from-GPT.md'), '経路・依頼ファイル・結果ファイルを残す');
+  check(S.deliveryState(r) === 'delivered', '送付の状態の判定は変わらない');
+  S.recordDelivery(c, r.requestId, { at: t(), status: 'copied', connector: 'manual' });
+  const m = r.deliveries[1];
+  check(m.route === null && m.toFile === null && m.fromFile === null, '手動の送付では経路・場所は null');
+  const back = JSON.parse(JSON.stringify(c));
+  check(JSON.stringify(S.currentRequest(back, 'OBS', 'GPT').deliveries) === JSON.stringify(r.deliveries), 'JSON の書き出しと読み込みで変わらない');
+});
+
 return results;
 }
 if (typeof module !== 'undefined') module.exports = { run1c };

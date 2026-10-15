@@ -121,6 +121,34 @@ test('D-06 層名は語の全体で読む。既知の層と完全一致しなけ
   check(d.length === 2 && d[0].origin === 'SOURCE' && d[1].origin === 'STATE' && d.every(x => x.auto) && d[1].text === '。B', '層名の直後の句読点は層名に含めない ' + view(d));
 });
 
+test('R-01 中継のファイル名の変換は、中継（Python の safe）と同じ（1d-3）', () => {
+  const cases = [['Claude Code', 'Claude_Code'], ['Codex', 'Codex'], ['GPT-6 β', 'GPT-6_β'], ['クロード コード', 'クロード_コード'],
+    ['a/b\\c', 'a_b_c'], ['  lead', '_lead'], ['x'.repeat(100), 'x'.repeat(80)], ['CASE-20261015-001-OBS-ClaudeCode', 'CASE-20261015-001-OBS-ClaudeCode']];
+  for (const [n, want] of cases) check(T.relaySafeName(n) === want, JSON.stringify(n) + ' → ' + JSON.stringify(T.relaySafeName(n)));
+  check(T.relaySafeName('..') === null && T.relaySafeName('.') === null && T.relaySafeName('') === null, '中継が拒否する名前（空・.・..）は null');
+});
+
+test('R-02 依頼ファイルと結果ファイルのパス（1d-3）', () => {
+  const w = T.relayPaths('C:\\ex\\exchange', 'CASE-1', 'CASE-1-OBS-ClaudeCode', 'Claude Code');
+  check(w && w.toFile === 'C:\\ex\\exchange\\CASE-1\\CASE-1-OBS-ClaudeCode\\to-Claude_Code.md' && w.fromFile === 'C:\\ex\\exchange\\CASE-1\\CASE-1-OBS-ClaudeCode\\from-Claude_Code.md' && !w.relative, 'Windows の受け渡しフォルダ ' + (w && w.toFile));
+  const t = T.relayPaths('C:\\ex\\exchange\\', 'CASE-1', 'CASE-1-SYN', 'GPT');
+  check(t && t.toFile === 'C:\\ex\\exchange\\CASE-1\\CASE-1-SYN\\to-GPT.md', '末尾の区切りは二重にしない ' + (t && t.toFile));
+  const u = T.relayPaths('/home/u/exchange', 'CASE-1', 'CASE-1-NEXT', 'Codex');
+  check(u && u.fromFile === '/home/u/exchange/CASE-1/CASE-1-NEXT/from-Codex.md', 'POSIX のパス ' + (u && u.fromFile));
+  const r = T.relayPaths('', 'CASE-1', 'CASE-1-NEXT', 'Codex');
+  check(r && r.relative && r.toFile === 'proxy/exchange/CASE-1/CASE-1-NEXT/to-Codex.md', '受け渡しフォルダが分からないときは、中継からの相対パス ' + (r && r.toFile));
+  check(T.relayPaths('C:\\ex', 'CASE-1', 'CASE-1-NEXT', '..') === null, '名前が使えなければ null');
+});
+
+test('R-03 AI への指示文（1d-3）', () => {
+  const p = T.relayPaths('C:\\ex', 'CASE-1', 'CASE-1-OBS-Codex', 'Codex');
+  const s = T.agentInstruction(p);
+  check(s.includes(p.toFile) && s.includes(p.fromFile), '依頼ファイルと結果ファイルの完全なパスを含む');
+  check(s.includes('このファイルだけ') && s.includes('ほかのファイルは作成・変更・削除しないでください'), '書いてよいのは結果ファイルだけ、と明記');
+  check(s.includes('TASK') && s.includes('止まって'), '依頼ファイルがない・TASK が合わないときは止まる、と明記');
+  check(T.agentInstruction(null) === '', 'パスがなければ空');
+});
+
 return results;
 }
 if (typeof module !== 'undefined') module.exports = { run1d };

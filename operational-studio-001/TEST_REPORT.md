@@ -79,10 +79,10 @@ GPT の観測は届いていません。この環境から GPT を操作する�
 | 解析の不具合注入（`mutation_runner_r3.html`） | 23/23 検出 | Claude、Codex |
 | 段階1b の規則（`test_1b.html`） | 107/107 | Claude、Codex（Node） |
 | 段階1b の不具合注入（`mutation_1b.html`） | 20/22 検出（残る2件は動作を変えない変異。根拠は Codex も確認） | Claude、Codex |
-| 段階1c の規則（`test_1c.html`） | 32/32 | Claude、Codex（Node） |
-| 段階1c の不具合注入（`mutation_1c.html`） | 10/10 検出 | Claude、Codex |
-| 段階1d-A の文字列処理（`test_1d.html`） | 44/44 | Claude、Codex（Node。C49 で再実行） |
-| 段階1d-A の不具合注入（`mutation_1d.html`） | 13/13 検出 | Claude、Codex（Node。C49 で再実行） |
+| 段階1c の規則（`test_1c.html`） | 36/36（Q-08 は 1d-B で追加） | Claude、Codex（Node） |
+| 段階1c の不具合注入（`mutation_1c.html`） | 11/11 検出（C-11 は 1d-B で追加） | Claude、Codex |
+| 段階1d の文字列処理（`test_1d.html`） | 62/62（1d-A 44 ＋ 1d-B 18） | 1d-A：Claude、Codex（Node。C49）／1d-B：Claude、Codex（Node。C52） |
+| 段階1d の不具合注入（`mutation_1d.html`） | 20/20 検出（1d-A 13 ＋ 1d-B 7） | 同上 |
 
 - 試験の期待値は、実装の前に固定しました（ハッシュと時刻を記録）。
 - 不具合注入で検査の不足が見つかったときは、検査を足し、その経緯を記録しました。

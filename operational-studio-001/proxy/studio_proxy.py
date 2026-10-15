@@ -147,7 +147,9 @@ class Handler(BaseHTTPRequestHandler):
             d = EXCHANGE / safe(case) / safe(task); d.mkdir(parents=True, exist_ok=True)
             (d / f'to-{safe(to)}.md').write_text(packet, encoding='utf-8')
             if route == 'agent':
-                return self.reply(200, {'queued': True, 'note': f'{d / ("to-" + safe(to) + ".md")} に書き出しました。回答は同じフォルダの from-{safe(to)}.md'})
+                to_file, from_file = d / f'to-{safe(to)}.md', d / f'from-{safe(to)}.md'
+                return self.reply(200, {'queued': True, 'toFile': str(to_file), 'fromFile': str(from_file),
+                                        'note': f'{to_file} に書き出しました。回答は同じフォルダの from-{safe(to)}.md'})
             if route == 'mock':
                 text = mock_reply(case, task, to, packet)
             elif route.startswith('api:'):

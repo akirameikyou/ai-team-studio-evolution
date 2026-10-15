@@ -284,7 +284,8 @@ async function deliverOnce(c, req, retry) {
   }
   try {
     const res = await conn.send({ caseId: c.id, taskId: req.task, observer: os, packet: req.packet, proxyUrl: store.settings.proxyUrl });
-    StudioState.recordDelivery(c, req.requestId, { at: now(), status: res.status, connector: os.connector, retry });
+    StudioState.recordDelivery(c, req.requestId, { at: now(), status: res.status, connector: os.connector, retry,
+      route: os.connector === 'proxy' ? (os.route || 'agent') : null, toFile: res.toFile || null, fromFile: res.fromFile || null });
     if (os.connector === 'manual') bump(c, 'copy'); else bump(c, 'autoSend');
     const stamp = { status: res.status, connector: os.connector };
     if (req.kind === 'OBS' && c.tasks[name] && c.tasks[name].taskId === req.task) { c.tasks[name].sentAt = now(); c.tasks[name].sendStatus = { at: now(), ...stamp }; }   // only the current task (Codex C42)
@@ -321,6 +322,39 @@ function showRequest(c, kind, name) {
       let ok = false; try { await navigator.clipboard.writeText(text); ok = true; } catch (_) { const ta = d.querySelector('textarea'); ta.select(); try { ok = document.execCommand('copy'); } catch (__) { } }
       b.textContent = ok ? 'コピーしました' : 'コピーできません。上の本文を手で選んでコピーしてください';
       if (ok) { bump(c, 'copy'); log(c, `依頼文を再コピー ${task}（保存済みの本文${req && req.sha256 ? '・SHA-256 ' + req.sha256.slice(0, 8) + '…' : ''}。新しい依頼ではありません）`); save(); render(); }
+      return;
+    }
+    d.close(); d.remove();
+  });
+  d.addEventListener('cancel', () => d.remove());
+}
+// 1d-3 / 1d-B: on the relay's file route (agent) the relay does not start the AI. A person tells the AI which file to read and
+// which file to write. The guide follows the delivery record, not today's settings (Codex C51): it is shown only when the
+// current request was delivered on the agent route, and it uses the files the relay reported it wrote. Only a relay that does
+// not report them falls back to an estimate (marked as such), built from the exchange folder confirmed for the same relay URL.
+function agentTarget(c, kind, name) {
+  const req = StudioState.currentRequest(c, kind, name);
+  if (!req) return null;
+  const d = [...req.deliveries].reverse().find(x => x.status === 'queued');
+  if (!d || d.route !== 'agent') return null;
+  if (d.toFile && d.fromFile) return { toFile: d.toFile, fromFile: d.fromFile, estimated: false, relative: false };
+  const dir = store.settings.exchangeFor && store.settings.exchangeFor === store.settings.proxyUrl ? store.settings.exchangeDir : '';
+  const p = StudioText.relayPaths(dir, c.id, req.task, req.name || name);
+  return p ? { ...p, estimated: true } : null;
+}
+function showAgentGuide(c, kind, name) {
+  const p = agentTarget(c, kind, name), text = StudioText.agentInstruction(p);
+  const d = document.createElement('dialog');
+  d.innerHTML = `<h2>${esc(name)} への指示（ファイル受け渡し）</h2>
+    <p class="hint">中継は AI を起動しません。次の文面を ${esc(name)} に渡してください。${p && p.estimated ? '<br><b>このパスは推定です</b>（中継がファイルの場所を返さなかったため、Studio が計算しました。まれな文字を含む名前では、中継の実際の場所と違うことがあります）。' + (p.relative ? '受け渡しフォルダの場所も分からないので、中継のフォルダからの相対パスです。' : '') : p ? '中継が実際に書いたファイルの場所です。' : ''}</p>
+    ${text ? `<textarea rows="10" readonly>${esc(text)}</textarea>` : '<p class="warn">AI の名前または Task ID がファイル名に使えないため、パスを作れません。</p>'}
+    <div class="row end">${text ? '<button class="btn primary" value="copy">指示をコピー</button>' : ''}<button class="btn" value="close">閉じる</button></div>`;
+  document.body.appendChild(d); d.showModal();
+  d.querySelectorAll('button').forEach(b => b.onclick = async () => {
+    if (b.value === 'copy') {
+      let ok = false; try { await navigator.clipboard.writeText(text); ok = true; } catch (_) { const ta = d.querySelector('textarea'); ta.select(); try { ok = document.execCommand('copy'); } catch (__) { } }
+      b.textContent = ok ? 'コピーしました' : 'コピーできません。上の文面を手で選んでコピーしてください';
+      if (ok) { bump(c, 'copy'); log(c, `${name} への指示（ファイル受け渡し）をコピー：${p.toFile}`); save(); render(); }
       return;
     }
     d.close(); d.remove();
@@ -397,7 +431,7 @@ function nextStep(c) {
     return [pre + (got < n ? `使える観測 ${got}/${n} 件。` : '全員の観測がそろいました。') + '統合をどのAIに頼むか選んで送ってください。', acts];
   }
   if (!c.synthesis && S.canRetry(c, 'SYN')) { acts.push(isSending(S.currentRequest(c, 'SYN')) ? ['送付中…', () => { }] : ['同じ依頼を送り直す', () => retrySend(c, 'SYN'), true], ['依頼文を表示・コピー', () => showRequest(c, 'SYN')]); return [`${c.synthesisReq.to} への統合の依頼（${c.synthesisReq.task || StudioState.synTaskId(c)}）は送付に失敗しました。依頼文は保存済みです。原因（中継の停止など）を直してから、同じ依頼を送り直してください。`, acts]; }
-  if (!c.synthesis) { acts.push(['依頼文を表示・コピー', () => showRequest(c, 'SYN')]); if (store.settings.proxyUrl) acts.push(['中継から統合を回収', () => collectAll(c)]); return [`${c.synthesisReq.to} の統合結果を待っています（${c.synthesisReq.task || StudioState.synTaskId(c)}）。届いたら「結果を受け取る」に貼ってください。`, acts]; }
+  if (!c.synthesis) { acts.push(['依頼文を表示・コピー', () => showRequest(c, 'SYN')]); if (agentTarget(c, 'SYN', c.synthesisReq.to)) acts.push(['AIへの指示を表示', () => showAgentGuide(c, 'SYN', c.synthesisReq.to)]); if (store.settings.proxyUrl) acts.push(['中継から統合を回収', () => collectAll(c)]); return [`${c.synthesisReq.to} の統合結果を待っています（${c.synthesisReq.task || StudioState.synTaskId(c)}）。届いたら「結果を受け取る」に貼ってください。`, acts]; }
   if (!S.synthesisEligible(c)) return ['統合結果に確認が必要な項目があります。「統合」欄で確認してから判断してください。', acts];
   if (!c.gate || S.gateStale(c)) return ['統合結果が届きました。右の「人間の判断」で APPROVE / HOLD / REVISE を選んでください。', acts];
   if (c.gate.decision === 'HOLD') return ['保留中です。確かめることが分かったら、新しい問いを始めるか、判断をやり直してください。', acts];
@@ -408,6 +442,7 @@ function nextStep(c) {
   if (!c.done && S.canRetry(c, 'NEXT')) { acts.push(isSending(S.currentRequest(c, 'NEXT')) ? ['送付中…', () => { }] : ['同じ依頼を送り直す', () => retrySend(c, 'NEXT'), true], ['依頼文を表示・コピー', () => showRequest(c, 'NEXT')]); return [`${c.next.to} への実行タスク（${c.next.task || StudioState.nextTaskId(c)}）は送付に失敗しました。依頼文は保存済みです。原因を直してから、同じ依頼を送り直してください。`, acts]; }
   if (!S.canCountDone(c)) {
     if (!c.done) acts.push(['依頼文を表示・コピー', () => showRequest(c, 'NEXT')]);
+    if (!c.done && agentTarget(c, 'NEXT', c.next.to)) acts.push(['AIへの指示を表示', () => showAgentGuide(c, 'NEXT', c.next.to)]);
     if (store.settings.proxyUrl) acts.push(['中継から実行報告を回収', () => collectAll(c)]);
     return [c.done ? '完了報告に確認が必要な項目があるか、古い依頼への報告です。「次の行動」欄を確認してください。' : `${c.next.to} に実行タスクを渡しました（${c.next.task || StudioState.nextTaskId(c)}）。完了報告が届いたら貼ってください。`, acts];
   }
@@ -470,12 +505,14 @@ function renderObservers(c) {
     return `<div class="item"><div class="item-h"><b>${esc(n)}</b>${st}<span class="chip">受信 ${recv}</span><span class="chip">${os.connector === 'manual' ? '手動' : 'ローカル中継'}</span>${gen > 1 ? `<span class="chip">依頼 第${gen}回</span>` : ''}
       ${failed ? '<span class="chip ng">送付に失敗</span>' : ''}
       ${req || t.sentAt ? `<button class="btn ghost" data-req="${esc(n)}">依頼文を表示</button>` : ''}
+      ${t.sentAt && !r && !failed && agentTarget(c, 'OBS', n) ? `<button class="btn" data-guide="${esc(n)}">AIへの指示を表示</button>` : ''}
       ${obsSending(c, n) ? '<button class="btn" disabled>送付中…</button>' : `${failed ? `<button class="btn primary" data-retry="${esc(n)}">同じ依頼を送り直す</button>` : ''}
       ${failed && !t.sentAt ? '' : `<button class="btn" data-send="${esc(n)}">${t.sentAt ? '作り直して再送（新しい世代）' : os.connector === 'manual' ? '依頼文をコピー' : '送る'}</button>`}`}</div>
       ${r ? confirmControls(c, 'RESULT', r, n) : ''}
       ${r ? `<dl class="obs-body"><dt>観測</dt><dd>${esc(r.fields.OBSERVATION || '（ブロックなし。原文を保存）')}</dd><dt>根拠</dt><dd>${esc(r.fields.EVIDENCE || '—')}</dd><dt>不明</dt><dd>${esc(r.fields.UNKNOWN || '—')}</dd><dt>観測条件</dt><dd>${esc(r.fields.CONDITION || '—')}</dd></dl><details><summary class="hint">原文</summary><pre>${esc(r.raw)}</pre></details>` : ''}</div>`; }).join('');
   $('observers').querySelectorAll('[data-send]').forEach(b => b.onclick = () => send(c, b.dataset.send, 'observe'));
   $('observers').querySelectorAll('[data-req]').forEach(b => b.onclick = () => showRequest(c, 'OBS', b.dataset.req));
+  $('observers').querySelectorAll('[data-guide]').forEach(b => b.onclick = () => showAgentGuide(c, 'OBS', b.dataset.guide));
   $('observers').querySelectorAll('[data-retry]').forEach(b => b.onclick = () => retrySend(c, 'OBS', b.dataset.retry));
   bindConfirm(c, $('observers'));
   renderUnassigned(c);
@@ -556,11 +593,13 @@ function renderMeter(c) {
 }
 
 // ---------- settings ----------
+// 1d-4: the route only matters for the relay; a stored value outside the list (Meta's 'manual') is shown as it is.
+const ROUTES = ['agent', 'api:openai', 'api:anthropic', 'api:gemini', 'mock'];
 function renderSettings() {
   $('proxyUrl').value = store.settings.proxyUrl || '';
   $('connRows').innerHTML = store.settings.observers.map((o, i) => `<tr><td>${esc(o.name)}</td><td><select data-i="${i}" data-k="connector"><option value="manual"${o.connector === 'manual' ? ' selected' : ''}>手動</option><option value="proxy"${o.connector === 'proxy' ? ' selected' : ''}>ローカル中継</option></select></td>
-    <td><select data-i="${i}" data-k="route">${['agent', 'api:openai', 'api:anthropic', 'api:gemini', 'mock'].map(r => `<option value="${r}"${o.route === r ? ' selected' : ''}>${r === 'agent' ? 'ファイル受け渡し（Claude Code・Codex等）' : r === 'mock' ? 'テスト用の模擬応答' : 'API ' + r.slice(4)}</option>`).join('')}</select></td></tr>`).join('');
-  $('connRows').querySelectorAll('select').forEach(s => s.onchange = () => { store.settings.observers[+s.dataset.i][s.dataset.k] = s.value; save(); });
+    <td><select data-i="${i}" data-k="route"${o.connector === 'manual' ? ' disabled title="手動のときは使いません"' : ''}>${ROUTES.includes(o.route) ? '' : `<option value="${esc(o.route || '')}" selected>${!o.route || o.route === 'manual' ? '（使わない：手動）' : esc(o.route) + '（今の設定）'}</option>`}${ROUTES.map(r => `<option value="${r}"${o.route === r ? ' selected' : ''}>${r === 'agent' ? 'ファイル受け渡し（Claude Code・Codex等）' : r === 'mock' ? 'テスト用の模擬応答' : 'API ' + r.slice(4)}</option>`).join('')}</select></td></tr>`).join('');
+  $('connRows').querySelectorAll('select').forEach(s => s.onchange = () => { store.settings.observers[+s.dataset.i][s.dataset.k] = s.value; save(); if (s.dataset.k === 'connector') renderSettings(); });
 }
 
 // ---------- events ----------
@@ -604,9 +643,9 @@ function bind() {
       log(c, '記録JSONから読み込み'); save(); render(); } catch (err) { tell('読み込めません: ' + err.message); } };
   $('settingsBtn').onclick = () => { renderSettings(); $('settings').showModal(); };
   // Save the relay URL as it is typed, so re-rendering the dialog (e.g. adding an AI) never drops it.
-  $('proxyUrl').oninput = () => { store.settings.proxyUrl = $('proxyUrl').value.trim(); save(); };
+  $('proxyUrl').oninput = () => { const v = $('proxyUrl').value.trim(); if (v !== store.settings.proxyUrl) { store.settings.exchangeDir = ''; store.settings.exchangeFor = ''; } store.settings.proxyUrl = v; save(); };
   $('settings').addEventListener('close', () => { save(); render(); schedulePoll(); });
-  $('proxyTest').onclick = async () => { try { const j = await proxyHealth($('proxyUrl').value.trim()); $('proxyMsg').textContent = `接続OK（使えるAPI: ${j.providers.join(', ') || 'なし'}／受け渡しフォルダ: ${j.exchange}）`; } catch (e) { $('proxyMsg').textContent = '接続できません: ' + e.message; } };
+  $('proxyTest').onclick = async () => { try { const url = $('proxyUrl').value.trim(); const j = await proxyHealth(url); store.settings.exchangeDir = j.exchange || ''; store.settings.exchangeFor = url; save(); $('proxyMsg').textContent = `中継に届きました（使えるAPI: ${j.providers.join(', ') || 'なし'}／受け渡しフォルダ: ${j.exchange}）。AI との往復ができるかは、まだ確かめていません。`; } catch (e) { store.settings.exchangeDir = ''; store.settings.exchangeFor = ''; save(); $('proxyMsg').textContent = '接続できません: ' + e.message; } };
   $('newObsBtn').onclick = () => { const v = $('newObs').value.trim(); if (!v || store.settings.observers.some(o => o.name === v)) return; store.settings.observers.push({ name: v, connector: 'manual', route: 'manual' }); $('newObs').value = ''; save(); renderSettings(); render(); };
 }
 async function doPaste(text, via) {

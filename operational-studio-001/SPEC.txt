@@ -1,4 +1,4 @@
-状態: 仕様書 v0.7 r2（正本）／ 段階1d-A を反映。Codex C48・C49 の指摘に対応
+状態: 仕様書 v0.8 r2（正本）／ 段階1d-B を反映。Codex C51・C52 の指摘に対応
 sender: CLAUDE_CODE
 件名: AI Team Studio（operational-studio-001 系）仕様書 ― 解析・状態・依頼記録・回収・送付・文字列処理の正本（版は「状態」の行と改訂の履歴で示す）
 作成: 2026-10-15（v0.6）。計画 P1（文書の一本化）。ユーザーの依頼「GPTと検討のうえ進行」と、GPT との合意（10/15）による。
@@ -166,7 +166,7 @@ sender: CLAUDE_CODE
      この記録がこのブラウザに保存できない限り、送付しない（Q-1a。C42）。
      本文の SHA-256 は、計算できないときは null として記録し、送付は止めない（R-1a と同じ。本文そのものは必ず保存する）（r1。C45）。
  Q-2 送付のたびに、送付結果を同じ記録の deliveries に追記する。
-     中身：at、status（copied／shown／queued／answered／failed）、connector、error、retry。
+     中身：at、status（copied／shown／queued／answered／failed）、connector、error、retry、route（中継のときの経路）、toFile・fromFile（中継が agent 経路で実際に書いた依頼ファイルと、返事を待つ結果ファイル。段階1d-B）。
      ・送付済み（delivered）＝ copied・shown・queued・answered のどれかが1回以上ある
      ・失敗（failed）＝ 送付済みがなく、failed がある
      ・未送付（unsent）＝ どちらもない
@@ -191,8 +191,15 @@ sender: CLAUDE_CODE
      失敗・遅着・NO_BLOCK の後も続ける。同じ原文は二重に記録しない。
  W-3 回収は1つずつ順に実行する（タイマーと手動ボタンが重なっても、同じ原文を二重に記録しない。C40 (a)）。
  W-4 中継は 127.0.0.1 だけで待ち受ける。
-     ・agent 経路：exchange/<CASE>/<TASK>/ に to-<AI>.md を書き、AI が書いた from-<AI>.md を回収する。AI を起動する仕組みはない
+     ・agent 経路：exchange/<CASE>/<TASK>/ に to-<AI>.md を書き、AI が書いた from-<AI>.md を回収する。AI を起動する仕組みはない。/task の応答で、書いた to- と、返事を待つ from- の完全なパス（toFile・fromFile）を返す（段階1d-B）
      ・API 経路：中継がサーバー側で API を呼ぶ
+ W-5（段階1d-B）agent 経路の依頼が返事を待っている間（観測の行・統合待ち・完了報告待ち）、画面に「AIへの指示を表示」を出す。
+     ・表示するのは、§13 S-3 の指示文（依頼ファイルと結果ファイルの完全なパス、書いてよいのは結果ファイルだけ、合わないときは止まる）
+     ・案内を出すかどうかとパスは、今の設定ではなく、今の依頼の最後の送付の記録で決める（Codex C51）：送付の経路が agent のときだけ出す。パスは、中継が返した toFile・fromFile を使う
+     ・中継がパスを返さない（古い中継）ときだけ、§13 S-3 で推定し、「推定」と明示する。推定に使う受け渡しフォルダは、同じ中継 URL で「接続を確認」したときに記録したもの（settings.exchangeDir と exchangeFor）。中継 URL を変えたとき・確認に失敗したときは記録を消す。分からなければ中継からの相対パス
+     ・コピーはログとコピー回数にだけ残る。状態は変えない
+ W-6（段階1d-B）「接続を確認」は中継の /health に届くかだけを確かめる。結果の表示に「AI との往復ができるかは、まだ確かめていない」と書く。
+ W-7（段階1d-B）設定画面の中継先（route）は、渡し方が「手動」のときは選べない（使わないため）。保存値が選択肢にないとき（Meta の manual など）は、その値をそのまま表示する。
 
 11. テンプレート表（版 TEMPLATE-TABLE-2026-10-12-a）
  v0.5 §5 の本文をそのまま収録した（r1。変更なし。v0.6 では §11）。
@@ -234,6 +241,11 @@ sender: CLAUDE_CODE
      ・確実に分けられないとき（印が2つ以上あり、知らない層を1つでも含む行／印のない行）は、原文のまま1項目・未分類
      ・内容を黙って捨てない：最後の印の後の文は未分類の項目として残す。空の項目は「（内容なし）」として残す
      ・例外：印が1つだけの行は分けない（行そのものが1項目）。このときは、層名を書かれたとおりに表示する（知らない名前でも未分類にしない。従来どおり）
+ S-3（段階1d-B）中継のファイル名・パス・AI への指示文
+     ・relaySafeName：中継（proxy/studio_proxy.py の safe）の変換を写したもの。Unicode の文字・数字・_ . - 以外の並びを _ にし、80文字（コードポイント）で切る。空・.・.. は使えない（null）。
+       Python と JavaScript で Unicode の版が違うと、一部の文字で中継と一致しない（Codex C51 の確認：Python 15.0／Node 17.0、例 U+088F）。そのため、案内には中継が返したパスを使い、この変換は推定にだけ使う
+     ・relayPaths(受け渡しフォルダ, Case, Task, AI名)：<フォルダ>/<Case>/<Task>/to-<AI>.md と from-<AI>.md。区切りはフォルダに \ があれば \、なければ /。末尾の区切りは除く。フォルダが分からなければ proxy/exchange からの相対パス
+     ・agentInstruction：依頼ファイルと結果ファイルの完全なパス、書いてよいのは結果ファイルだけ、ほかのファイルの作成・変更・削除と commit・push をしない、依頼ファイルが無い・TASK が合わないときは止まる、を含む
 
 ════════════════════════════════════════
 第II部　実装・試験との対応（事実。2026-10-15 時点）
@@ -255,12 +267,13 @@ sender: CLAUDE_CODE
 | §6 世代 | obsTaskId・synTaskId・nextTaskId・startSynthesisRequest・startNext・startObservationResend | 1b「世代と Task ID」・A-07・A-08、変異 B-14 | — |
 | §7 改訂番号・失効・ガード | synthesisStale〜doneStale、canGate ほか | 1b A-07（a〜d）・A-11、変異 B-02・B-03・B-05・B-09・B-13・B-18 | 画面（1b、Claude） |
 | §8 確認 | setConfirmation・confirmedItems | 1b A-03・A-07(d)・A-09 | 画面（1b、Claude） |
-| §9 Q-1〜Q-4・Q-7 | studio_state.js recordRequest・recordDelivery・deliveryState・currentRequest・canRetry、app.js send・deliver・retrySend・showRequest | 1c Q-01〜Q-07（32 checks）、変異 C-01〜C-10 | 手動経路の一周・中継停止→送り直し（1c、Claude）、T-LOOP 002（ユーザー） |
+| §9 Q-1〜Q-4・Q-7 | studio_state.js recordRequest・recordDelivery・deliveryState・currentRequest・canRetry、app.js send・deliver・retrySend・showRequest | 1c Q-01〜Q-08（36 checks。Q-08 は送付の記録の route・toFile・fromFile で、1d-B で追加）、変異 C-01〜C-11（C-11 は 1d-B で追加） | 手動経路の一周・中継停止→送り直し（1c、Claude）、T-LOOP 002（ユーザー） |
 | §9 Q-1a・Q-5・Q-6 | app.js save・deliver・deliverOnce・inFlight | 自動試験なし（画面側の動作） | 修正前に再現→修正後を確認（1c-r2・r3・r4、Claude） |
 | §10 W-1〜W-3 | app.js collectAll・collectOnce | 自動試験なし | 中継の実測（1b-r2・r3、Claude）、Codex 実接続試験001・段階7接続試験001（ユーザー＋Codex Desktop） |
 | §10 W-4 中継の待ち受け | proxy/studio_proxy.py（ThreadingHTTPServer(('127.0.0.1', port))、175行） | 自動試験なし | 10/7 の試験（TEST_REPORT：CORS・パスの無害化）、10/14 の netstat で 127.0.0.1:8787 の待ち受けを確認（Claude） |
 | §11 テンプレート表 | parse_v2.js（見本の判定。版 TEMPLATE-TABLE-2026-10-12-a）、app.js の依頼文（observePacket・synthesisPacket・nextPacket） | 1a の見本の試験（TEMPLATE_ONLY 5件・TEMPLATE_VALUE 9件、cases_v2r3）。表の14の文言が app.js と parse_v2.js の両方に同じ文字列であることを r1 で確認 | — |
 | §4 R-1a・§9 Q-1 の SHA-256 | app.js receiveText・send（計算できないときは null） | 1b・1c の規則試験は rawSha256 を null で渡す | T-LOOP 002 の JSON で、受信4件・依頼4件のハッシュを計算し直して一致（Claude） |
+| §13 S-3・§10 W-5〜W-7（段階1d-B） | studio_text.js relaySafeName・relayPaths・agentInstruction。app.js agentTarget・showAgentGuide・deliverOnce（送付の記録に route・toFile・fromFile）・nextStep・renderObservers・proxyTest（exchangeDir と exchangeFor）・renderSettings。connectors.js（toFile・fromFile を渡す）。proxy/studio_proxy.py（agent 経路の応答に toFile・fromFile） | test_1d.html R-01〜R-03（名前の変換の期待値は中継の safe() で計算）、変異 T-14〜T-20。1c Q-08・変異 C-11（送付の記録） | 画面で確認（Claude）：接続を確認で受け渡しフォルダを中継 URL と組で保存し文言を表示、URL の変更・確認の失敗で消える／観測・統合・NEXT の待ちで、中継が返したパスで指示を表示（パスのファイルが実在）／送付後に設定を変えても案内は送付の記録に従う／mock 経路では案内なし／パスを返さない中継では「推定」と表示／Meta は「（使わない：手動）」、手動の行は中継先を選べない。中継の応答は curl で確認 |
 | §13 S-1・S-2 文字列処理 | studio_text.js extractSources・splitDifferences。app.js createCase（bareNames: false）・資料を追加（既定）・autoDifferences | test_1d.html 44/44（X-01〜X-07・D-01〜D-06。X-06 は画面確認で、X-07・D-06 は Codex C48 で追加）、変異 T-01〜T-13 13/13 | 画面で確認（問いのファイル名が資料にならない、追加欄では登録される、改行のない相違点4件が4項目に分かれ印が付く、Markdown も同じ。Claude） |
 | §12 旧形式 | studio_state.js の既定値・legacy 仮 ID | 1b A-12、1c Q-06、変異 B-07・B-15・C-07 | 実データの旧 Case 2件（10/8 の書き出し、1b-r2） |
 | JSON の書き出し・読み込み | app.js（exportBtn・importFile） | 1b A-11、1c Q-07 | 画面の往復（1b-r2・1c、Claude） |
@@ -301,9 +314,9 @@ C. 仕様と実装・文書の不一致（P1 の一覧。対応する段階）
  5. app.js に、旧い解析関数 parseBlock と RESULT_KEYS・SYNTH_KEYS・DONE_KEYS が使われずに残っていた。→ 段階1d-A で削除（解消）。参照がないことと、削除の前後で全試験が通ることを確認
  6. 問い中のファイル名（例「from-Codex.md」）を資料として取り出していた。→ 段階1d-A で解消（§13 S-1）。あわせて、URL の直後に空白なしで日本語が続くと日本語まで URL に含めていた不具合も解消（画面の確認で発見）
  7. 改行が失われた統合の返事で、差分欄に相違点が1件しか出なかった。→ 段階1d-A で解消（§13 S-2）。確実に分けられないときは原文を残し未分類
- 8. 「接続を確認」は中継の /health だけを確かめる。AI との往復の成否とは別。→ P3（1d）
- 9. ファイル受け渡しで、AI に伝える指示文とファイルの場所が、画面に出ない。→ P3（1d）
- 10. Meta の保存値 route 'manual' が、中継先の選択肢にない（画面の表示と保存値がずれる）。→ P3（1d）
+ 8. 「接続を確認」は中継の /health だけを確かめる。→ 段階1d-B で、そのことを結果の表示に明記（W-6。解消）
+ 9. ファイル受け渡しで、AI に伝える指示文とファイルの場所が画面に出なかった。→ 段階1d-B で「AIへの指示を表示」を追加（W-5・S-3。解消）
+ 10. Meta の保存値 route 'manual' が中継先の選択肢になく、表示と保存値がずれていた。→ 段階1d-B で解消（W-7）
  11. README・LIMITATIONS・TEST_REPORT は 10/7 の版のままだった。→ P1 で作業コピーの3文書を更新（解消。本体リポジトリへは P2 で取り込む）。
      根拠（SHA-256 の先頭。本体＝本体リポジトリの 10/7 版、作業コピー＝P1 後）：
      ・README.md       本体 74231d5f… → 作業コピー c3a206ff…（53行 → 82行。P1 で4節を追加し、C45・C46 対応で表現を修正）
@@ -312,6 +325,9 @@ C. 仕様と実装・文書の不一致（P1 の一覧。対応する段階）
  12. NEXT_TASK を画面で直せない。今回は GATE 理由で補えたが、編集機能が要らないということではない（GPT）。→ 保留
 
 改訂の履歴
+ v0.8 r2（2026-10-15）：Codex C52 に対応。第II部の対応表を更新（削除した isAgent・agentPaths を agentTarget などに、1c を Q-08・C-11 まで）。
+ v0.8 r1（2026-10-15）：Codex C51 に対応。中継が agent 経路で書いたファイルのパスを返し、送付の記録（Q-2）に経路とパスを残す。案内は送付の記録に従う（W-5）。受け渡しフォルダの記録を中継 URL に結び付ける。S-3 を推定用と明記し、Unicode の版の違いを制約として記載。
+ v0.8（2026-10-15）：段階1d-B。§10 に W-5〜W-7、§13 に S-3 を追加。不一致 C-8〜C-10 を解消。
  v0.7 r2（2026-10-15）：Codex C49 に対応。件名と優先の規定に残っていた「v0.6」を、この文書（最新の版）に直した。置き場所を明記。
  v0.7 r1（2026-10-15）：Codex C48 に対応。§13 S-1 の URL の区切りの文字を列挙（ASCII の ( を追加）。S-2 の層名の読み方（語の全体・完全一致）と、印が1つの行の例外を明記。第II部の対象の版を更新。
  v0.7（2026-10-15）：段階1d-A。§13（文字列処理 S-1・S-2）を新設。不一致 C-5・C-6・C-7 を解消。B に URL の制約を追加。

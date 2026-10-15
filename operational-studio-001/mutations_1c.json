@@ -1,5 +1,5 @@
 {
- "about": "段階1c（依頼記録）の studio_state.js に意図的な不具合を1つずつ入れ、test_1c_cases.js と test_1b_cases.js が不合格を出すか確かめる。mutation_1c.html で再実行できる。",
+ "about": "段階1c（依頼記録）の studio_state.js に意図的な不具合を1つずつ入れ、test_1c_cases.js と test_1b_cases.js が不合格を出すか確かめる。mutation_1c.html で再実行できる。 1d-B（Codex C51）で C-11 を追加。 C-05 の find を、1d-B で2行になった push に合わせて更新。",
  "mutants": [
   {
    "id": "C-01",
@@ -28,7 +28,7 @@
   {
    "id": "C-05",
    "name": "送付結果を追記しない",
-   "find": "req.deliveries.push({ at: d.at, status: d.status, connector: d.connector || null, error: d.error || null, retry: !!d.retry });",
+   "find": "    req.deliveries.push({ at: d.at, status: d.status, connector: d.connector || null, error: d.error || null, retry: !!d.retry,\n      route: d.route || null, toFile: d.toFile || null, fromFile: d.fromFile || null });",
    "replace": ""
   },
   {
@@ -60,6 +60,12 @@
    "name": "統合の今の依頼を Task ID ではなく最初の統合依頼にする",
    "find": "if (kind === 'SYN') return c.synthesisReq ? (c.synthesisReq.task || synTaskId(c)) : null;",
    "replace": "if (kind === 'SYN') return c.synthesisReq ? (c.id + '-SYN') : null;"
+  },
+  {
+   "id": "C-11",
+   "name": "送付の記録に経路と中継のファイルの場所を残さない",
+   "find": "route: d.route || null, toFile: d.toFile || null, fromFile: d.fromFile || null",
+   "replace": "route: null, toFile: null, fromFile: null"
   }
  ]
 }

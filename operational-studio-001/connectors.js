@@ -31,7 +31,7 @@ const Connectors = {
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
-      return j.text ? { status: 'answered', text: j.text, note: j.note } : { status: 'queued', note: j.note };
+      return j.text ? { status: 'answered', text: j.text, note: j.note } : { status: 'queued', note: j.note, toFile: j.toFile || null, fromFile: j.fromFile || null };
     },
     async collect(ctx) {
       const u = ctx.proxyUrl.replace(/\/$/, '') + '/result?' + new URLSearchParams({ case: ctx.caseId, task: ctx.taskId, to: ctx.observer.name });

@@ -2,6 +2,7 @@
 // AI Team Studio — stage 1d text helpers. Pure functions over strings (no DOM, no storage, no network), testable in Node.
 //   extractSources(text, { bareNames })  SOURCE candidates in a text (1d-1)
 //   splitDifferences(value)              items of a synthesis DIFFERENCES value, for display only (1d-2)
+//   relaySafeName / relayPaths / agentInstruction   relay file names, paths and the text to give an AI (1d-3)
 (function (global) {
   // 1d-1: URLs and absolute paths are always taken. Bare file names ("report.pdf") are taken only when a person typed them
   // into "add SOURCE" (bareNames: true, the default). From the question they are not: a file name mentioned in a question is
@@ -51,5 +52,29 @@
     return out;
   }
 
-  global.StudioText = { extractSources, splitDifferences, LAYERS };
+
+  // 1d-3: where the relay (proxy/studio_proxy.py) puts the request and expects the reply, and what to tell the AI.
+  // relaySafeName mirrors the relay's safe(): re.sub(r'[^\w.-]+', '_', part)[:80], and refuses '', '.', '..'.
+  // (Python's \w is Unicode letters, digits and _; the 80 is counted in code points.)
+  function relaySafeName(part) {
+    const s = Array.from(String(part == null ? '' : part).replace(/[^\p{L}\p{N}_.-]+/gu, '_')).slice(0, 80).join('');
+    return !s || s === '.' || s === '..' ? null : s;
+  }
+  function relayPaths(exchangeDir, caseId, taskId, aiName) {
+    const c = relaySafeName(caseId), t = relaySafeName(taskId), a = relaySafeName(aiName);
+    if (!c || !t || !a) return null;
+    const dir0 = String(exchangeDir || '').replace(/[\\/]+$/, '');
+    const relative = !dir0, base = relative ? 'proxy/exchange' : dir0, sep = !relative && base.includes('\\') ? '\\' : '/';
+    const dir = [base, c, t].join(sep);
+    return { dir, toFile: dir + sep + 'to-' + a + '.md', fromFile: dir + sep + 'from-' + a + '.md', relative };
+  }
+  function agentInstruction(p) {
+    if (!p) return '';
+    return ['AI Team Studio からの依頼です。次の依頼ファイルを読んでください：', p.toFile, '',
+      '依頼文の指示に従い、同じフォルダに次の結果ファイルを新しく書いてください（書いてよいのは、このファイルだけです）：', p.fromFile, '',
+      'ほかのファイルは作成・変更・削除しないでください。commit・push もしないでください。',
+      '依頼ファイルが無いとき、または依頼文の TASK がフォルダ名と合わないときは、何も書かずに止まって知らせてください。'].join('\n');
+  }
+
+  global.StudioText = { extractSources, splitDifferences, LAYERS, relaySafeName, relayPaths, agentInstruction };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

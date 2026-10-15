@@ -270,7 +270,9 @@
   function recordDelivery(c, requestId, d) {
     const req = requests(c).find(x => x.requestId === requestId);
     if (!req) return { ok: false, why: '依頼記録が見つかりません' };
-    req.deliveries.push({ at: d.at, status: d.status, connector: d.connector || null, error: d.error || null, retry: !!d.retry });
+    // 1d-B (Codex C51): the route used for this delivery and, on the relay's file route, the files the relay actually wrote.
+    req.deliveries.push({ at: d.at, status: d.status, connector: d.connector || null, error: d.error || null, retry: !!d.retry,
+      route: d.route || null, toFile: d.toFile || null, fromFile: d.fromFile || null });
     return { ok: true };
   }
   const deliveryState = req => !req ? null : req.deliveries.some(d => DELIVERED.includes(d.status)) ? 'delivered' : req.deliveries.some(d => d.status === 'failed') ? 'failed' : 'unsent';

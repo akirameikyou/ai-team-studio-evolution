@@ -74,6 +74,48 @@
    "replace": "'）)」"
   },
   {
+   "id": "T-14",
+   "name": "中継の名前変換で日本語などを _ にする",
+   "find": "[^\\p{L}\\p{N}_.-]+/gu",
+   "replace": "[^A-Za-z0-9_.-]+/gu"
+  },
+  {
+   "id": "T-15",
+   "name": "中継の名前を80文字で切らない",
+   "find": ".slice(0, 80)",
+   "replace": ".slice(0)"
+  },
+  {
+   "id": "T-16",
+   "name": "中継が拒否する名前（. ..）を通す",
+   "find": "!s || s === '.' || s === '..' ? null : s",
+   "replace": "!s ? null : s"
+  },
+  {
+   "id": "T-17",
+   "name": "区切りを常に / にする",
+   "find": "sep = !relative && ",
+   "replace": "sep = false && "
+  },
+  {
+   "id": "T-18",
+   "name": "受け渡しフォルダの末尾の区切りを除かない",
+   "find": "]+$/, '');\n    const relative",
+   "replace": "]+$/, '$&');\n    const relative"
+  },
+  {
+   "id": "T-19",
+   "name": "AI への指示から「ほかのファイルを変更しない」を除く",
+   "find": "'ほかのファイルは作成・変更・削除しないでください。commit・push もしないでください。',",
+   "replace": ""
+  },
+  {
+   "id": "T-20",
+   "name": "パスがないときも指示文を返す",
+   "find": "if (!p) return '';",
+   "replace": "if (!p) return ' ';"
+  },
+  {
    "id": "T-11",
    "name": "GitHub の URL を種類 URL にする",
    "find": "add(/github(usercontent)?\\.com/.test(m[0]) ? 'GitHub' : 'URL',",
