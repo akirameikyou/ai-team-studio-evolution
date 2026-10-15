@@ -1,0 +1,137 @@
+{
+ "about": "studio_state.js に意図的な不具合を1つずつ入れ、test_1b_cases.js（受入 A-01〜A-12 の規則部分）が不合格を出すか確かめる。mutation_1b.html で再実行できる。 r2（Codex 段階1b監査後）で B-19〜B-21 を追加。B-17 は到達しない防御の条件で等価な変異（Codex も同意）。 r3（Codex 段階1b再監査 C40 後）で B-22 を追加。",
+ "mutants": [
+  {
+   "id": "B-01",
+   "name": "NO_BLOCK が構造化された結果を置き換える",
+   "find": "if (rec.status === 'NO_BLOCK' && cur && cur.status !== 'NO_BLOCK') return 'kept';",
+   "replace": ""
+  },
+  {
+   "id": "B-02",
+   "name": "確認・取り消しで改訂番号を上げない",
+   "find": "if (c.observers.some(n => resultAttemptId(c, 'RESULT', c.tasks[n].result, n) === attemptId)) bump(c, 'obs');",
+   "replace": ""
+  },
+  {
+   "id": "B-03",
+   "name": "統合の失効判定で改訂番号を見ない",
+   "find": "if ((c.synthesisReq.obsRevision || 0) !== obsRevision(c)) return true;",
+   "replace": ""
+  },
+  {
+   "id": "B-04",
+   "name": "古い依頼への返事を採用してしまう",
+   "find": "if (target.late) { a.outcome = 'late'; a.lateTask = target.task; return a; }",
+   "replace": "if (target.late) { target.late = false; }"
+  },
+  {
+   "id": "B-05",
+   "name": "NEXT 送信の可否で GATE の失効を見ない",
+   "find": "const canSendNext = c => !!c.gate && c.gate.decision === 'APPROVE' && !gateStale(c);",
+   "replace": "const canSendNext = c => !!c.gate && c.gate.decision === 'APPROVE';"
+  },
+  {
+   "id": "B-06",
+   "name": "二重割り当てを許す",
+   "find": "if (a.assignment) return { ok: false, why: 'この受信は割り当て済みです（二重割り当ては不可）' };",
+   "replace": ""
+  },
+  {
+   "id": "B-07",
+   "name": "旧形式を利用不可にする",
+   "find": "if (!rec.status) return true;                                   // old format",
+   "replace": "if (!rec.status) return false;"
+  },
+  {
+   "id": "B-08",
+   "name": "notAdopted を記録しない",
+   "find": "a.notAdopted = usable.slice(1).map(",
+   "replace": "a.notAdopted = [].map("
+  },
+  {
+   "id": "B-09",
+   "name": "GATE の記録で可否を確かめない",
+   "find": "if (!canGate(c)) return { ok: false, why: staleReason(c, 'SYN') || '統合が使える状態ではありません（確認待ち・未着）' };",
+   "replace": ""
+  },
+  {
+   "id": "B-10",
+   "name": "観測の FROM 判定で世代を見ない",
+   "find": "return n && obsGen(c, n) === 1 ? { kind, name: n, task: obsTaskId(c, n) } : null;",
+   "replace": "return n ? { kind, name: n, task: obsTaskId(c, n) } : null;"
+  },
+  {
+   "id": "B-11",
+   "name": "利用可能数に確認待ちも含める",
+   "find": "const eligibleObservers = (c, opts) => c.observers.filter(n => eligibleRecord(c, 'RESULT', c.tasks[n].result, n, opts));",
+   "replace": "const eligibleObservers = (c, opts) => c.observers.filter(n => !!c.tasks[n].result);"
+  },
+  {
+   "id": "B-12",
+   "name": "PARSE_FAILED でも採用を切り替える",
+   "find": "const ADOPTABLE = ['OK', 'PARTIAL', 'UNCONFIRMED'];",
+   "replace": "const ADOPTABLE = ['OK', 'PARTIAL', 'UNCONFIRMED', 'PARSE_FAILED'];"
+  },
+  {
+   "id": "B-13",
+   "name": "GATE の失効で synRevision を見ない",
+   "find": "if ((g.synRevision || 0) !== synRevision(c)) return true;",
+   "replace": ""
+  },
+  {
+   "id": "B-14",
+   "name": "統合をやり直しても世代を上げない",
+   "find": "const gen = had + 1;\n    if (had) archive(",
+   "replace": "const gen = had || 1;\n    if (had) archive("
+  },
+  {
+   "id": "B-15",
+   "name": "読むだけで旧 Case に仮 ID を書き込む",
+   "find": "const resultAttemptId = (c, kind, rec, name) => rec ? (rec.attemptId || ",
+   "replace": "const resultAttemptId = (c, kind, rec, name) => rec ? (rec.attemptId || (rec.attemptId = 'legacy:x') || "
+  },
+  {
+   "id": "B-16",
+   "name": "失敗の受信を宛先に記録しない",
+   "find": "        a.assignment = { kind: target.kind, name: target.name || null, task: target.task, at: now, mode: 'auto' };\n        if (a.outcome === 'noblock'",
+   "replace": "        if (a.outcome === 'noblock'"
+  },
+  {
+   "id": "B-17",
+   "name": "統合・完了への形式外を採用する",
+   "find": "if (!c.synthesisReq || rec.status === 'NO_BLOCK') return 'rejected';",
+   "replace": "if (!c.synthesisReq) return 'rejected';"
+  },
+  {
+   "id": "B-18",
+   "name": "統合依頼の可否で利用可能数を見ない",
+   "find": "const canRequestSynthesis = c => eligibleObservers(c).length >= 1;",
+   "replace": "const canRequestSynthesis = c => true;"
+  },
+  {
+   "id": "B-19",
+   "name": "手動割り当てで優先タグ以外を許す（D12 迂回）",
+   "find": "if (a.picked && a.picked !== kind) return",
+   "replace": "if (false) return"
+  },
+  {
+   "id": "B-20",
+   "name": "古い NEXT への完了報告を採用する",
+   "find": "if (nextStale(c)) return 'stale';",
+   "replace": ""
+  },
+  {
+   "id": "B-21",
+   "name": "手動割り当てで picked なしの構造化ブロックも採用",
+   "find": "if (a.picked && block && ADOPTABLE.includes(block.status))",
+   "replace": "if (block && ADOPTABLE.includes(block.status))"
+  },
+  {
+   "id": "B-22",
+   "name": "picked なしで採用可能タグがある記録の割り当てを拒否しない（JSON 読込経由の D12 迂回）",
+   "find": "if (!a.picked && TAGS.some(([k]) => a.parsed[k] && ADOPTABLE.includes(a.parsed[k].status))) return",
+   "replace": "if (false) return"
+  }
+ ]
+}

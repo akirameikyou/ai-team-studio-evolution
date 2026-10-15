@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="ja">
+<head><meta charset="utf-8"><title>stage 1c state tests</title></head>
+<body>
+<h1>段階1c 依頼記録の試験（studio_state.js）</h1>
+<p>依頼文の保存（Q-1）、送付結果の追記（Q-2）、送付に失敗した依頼の送り直し（Q-3）を試験データで確かめる。段階1b の試験（run1b）も同時に実行し、後退がないことを確かめる。外部通信なし。</p>
+<pre id="out">running…</pre>
+<script src="parse_v2.js"></script>
+<script src="studio_state.js"></script>
+<script src="test_1b_cases.js"></script>
+<script src="test_1c_cases.js"></script>
+<script>
+'use strict';
+const sum = results => { const pass = results.filter(r => r.ok).length; return { total: results.length, pass, fail: results.length - pass, failures: results.filter(r => !r.ok), tests: [...new Set(results.map(r => r.test))].map(n => ({ test: n, checks: results.filter(r => r.test === n).length, fail: results.filter(r => r.test === n && !r.ok).length })) }; };
+const out = { stage1c: sum(run1c(StudioState)), stage1b: sum(run1b(StudioState)) };
+window.__T1C__ = out;
+document.getElementById('out').textContent = JSON.stringify(out, null, 2);
+</script>
+</body>
+</html>

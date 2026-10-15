@@ -72,6 +72,7 @@
             <div class="card-h"><h2>結果を受け取る</h2><span class="hint">貼るだけ。誰の結果かはStudioが判定します</span></div>
             <textarea id="pasteBox" rows="5" placeholder="AIの回答をそのまま貼り付け（またはファイルをここへドロップ）"></textarea>
             <div class="row"><button id="pasteBtn" class="btn primary">取り込む</button><span id="pasteMsg" class="hint"></span></div>
+            <div id="unassigned"></div>
           </div>
         </div>
 
@@ -118,6 +119,8 @@
 </dialog>
 
 <script src="connectors.js"></script>
+<script src="parse_v2.js"></script>
+<script src="studio_state.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

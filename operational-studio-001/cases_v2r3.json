@@ -1,0 +1,2546 @@
+{
+ "about": "段階1a-r3 の期待結果。cases_v2r2.json（変更せず残す）の期待のうち、null 以外のすべてに conflicts を明示した（Codex 再監査 B）。conflicts は仕様 v0.5 §2 の正式な戻り値。値の食い違う行頭重複があるのは N-11b・R-05 だけ。harness_common_r3.js は全件で無条件に比較する。",
+ "specRef": "STUDIO-PLAN_解析ルールv2_期待仕様書_v0.5.txt",
+ "keysets": {
+  "RESULT": [
+   "CASE",
+   "TASK",
+   "FROM",
+   "SOURCE_ACCESS",
+   "CONDITION",
+   "OBSERVATION",
+   "EVIDENCE",
+   "UNKNOWN"
+  ],
+  "SYNTH": [
+   "CASE",
+   "TASK",
+   "FROM",
+   "COMMON",
+   "DIFFERENCES",
+   "UNKNOWN",
+   "HOLD",
+   "EXECUTION_NEEDS",
+   "NEXT_TASK",
+   "GATE_QUESTION"
+  ],
+  "DONE": [
+   "CASE",
+   "TASK",
+   "FROM",
+   "CHANGED",
+   "VERIFIED",
+   "UNKNOWN",
+   "NEXT"
+  ]
+ },
+ "cases": [
+  {
+   "id": "P-01",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "以下が回答です。\n[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nSOURCE_ACCESS: S1=DIRECT\nCONDITION: model X\nOBSERVATION: 観測A\nEVIDENCE: DIRECT 根拠A\nUNKNOWN: なし\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "OK",
+    "reason": null,
+    "warnings": [],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "SOURCE_ACCESS": "S1=DIRECT",
+     "CONDITION": "model X",
+     "OBSERVATION": "観測A",
+     "EVIDENCE": "DIRECT 根拠A",
+     "UNKNOWN": "なし"
+    },
+    "missing": [],
+    "selected": "c1",
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "P-02",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "［STUDIO_RESULT］\nCASE：CASE-T\nTASK：CASE-T-OBS-GPT\nFROM：GPT\nSOURCE_ACCESS：S1=DIRECT\nCONDITION：model X\nOBSERVATION：観測A\nEVIDENCE：DIRECT 根拠A\nUNKNOWN：なし\n［/STUDIO_RESULT］",
+   "expected": {
+    "status": "OK",
+    "reason": null,
+    "warnings": [],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "SOURCE_ACCESS": "S1=DIRECT",
+     "CONDITION": "model X",
+     "OBSERVATION": "観測A",
+     "EVIDENCE": "DIRECT 根拠A",
+     "UNKNOWN": "なし"
+    },
+    "missing": [],
+    "selected": "c1",
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "P-03",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[STUDIO_RESULT] CASE: CASE-T TASK: CASE-T-OBS-GPT FROM: GPT SOURCE_ACCESS: S1=DIRECT CONDITION: model X OBSERVATION: 観測A EVIDENCE: DIRECT 根拠A UNKNOWN: なし [/STUDIO_RESULT]",
+   "expected": {
+    "status": "OK",
+    "reason": null,
+    "warnings": [],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "SOURCE_ACCESS": "S1=DIRECT",
+     "CONDITION": "model X",
+     "OBSERVATION": "観測A",
+     "EVIDENCE": "DIRECT 根拠A",
+     "UNKNOWN": "なし"
+    },
+    "missing": [],
+    "selected": "c1",
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "P-04",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "指定された形式はこうでした:\n[STUDIO_RESULT]\nCASE: (CASE)\nTASK: (TASK)\nFROM: (名前)\nSOURCE_ACCESS: (状態)\nCONDITION: (条件)\nOBSERVATION: (観測)\nEVIDENCE: (根拠)\nUNKNOWN: (不明)\n[/STUDIO_RESULT]\n実際の回答です。\n[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nSOURCE_ACCESS: S1=DIRECT\nCONDITION: model X\nOBSERVATION: 観測A\nEVIDENCE: DIRECT 根拠A\nUNKNOWN: なし\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "OK",
+    "reason": null,
+    "warnings": [],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "SOURCE_ACCESS": "S1=DIRECT",
+     "CONDITION": "model X",
+     "OBSERVATION": "観測A",
+     "EVIDENCE": "DIRECT 根拠A",
+     "UNKNOWN": "なし"
+    },
+    "missing": [],
+    "selected": "c2",
+    "candidates": {
+     "c1": "TEMPLATE",
+     "c2": "SELECTED"
+    },
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {
+      "CASE": "PARENTHESIZED",
+      "TASK": "PARENTHESIZED",
+      "FROM": "PARENTHESIZED",
+      "SOURCE_ACCESS": "PARENTHESIZED",
+      "CONDITION": "PARENTHESIZED",
+      "OBSERVATION": "PARENTHESIZED",
+      "EVIDENCE": "PARENTHESIZED",
+      "UNKNOWN": "PARENTHESIZED"
+     },
+     "verdict": "TEMPLATE"
+    },
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "P-05",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nSOURCE_ACCESS: S1=DIRECT\nCONDITION: model X\nOBSERVATION: 観測A\nEVIDENCE: DIRECT 根拠A\nUNKNOWN: なし\n[/STUDIO_RESULT]\n上の [STUDIO_RESULT]…[/STUDIO_RESULT] が私の回答です。",
+   "expected": {
+    "status": "OK",
+    "reason": null,
+    "warnings": [],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "SOURCE_ACCESS": "S1=DIRECT",
+     "CONDITION": "model X",
+     "OBSERVATION": "観測A",
+     "EVIDENCE": "DIRECT 根拠A",
+     "UNKNOWN": "なし"
+    },
+    "missing": [],
+    "selected": "c1",
+    "candidates": {
+     "c1": "SELECTED",
+     "c2": "NOT_STRUCTURAL"
+    },
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    },
+    {
+     "closed": true,
+     "keySet": [],
+     "placeholder": {},
+     "verdict": "NOT_STRUCTURAL"
+    }
+   ]
+  },
+  {
+   "id": "P-05b",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nSOURCE_ACCESS: S1=DIRECT\nCONDITION: model X\nOBSERVATION: 観測A\nEVIDENCE: DIRECT 根拠A\nUNKNOWN: なし\n以上、[STUDIO_RESULT] の形式で答えました。",
+   "expected": {
+    "status": "PARSE_FAILED",
+    "reason": "UNCLOSED_FOLLOWED_BY_TAG",
+    "warnings": [],
+    "fields": {},
+    "missing": [
+     "CASE",
+     "TASK",
+     "FROM",
+     "SOURCE_ACCESS",
+     "CONDITION",
+     "OBSERVATION",
+     "EVIDENCE",
+     "UNKNOWN"
+    ],
+    "selected": null,
+    "candidates": {
+     "c1": "VALID_NOT_SELECTED",
+     "c2": "NOT_STRUCTURAL"
+    },
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": false,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "VALID_NOT_SELECTED"
+    },
+    {
+     "closed": false,
+     "keySet": [],
+     "placeholder": {},
+     "verdict": "NOT_STRUCTURAL"
+    }
+   ]
+  },
+  {
+   "id": "P-05c",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nSOURCE_ACCESS: S1=DIRECT\nCONDITION: model X\nOBSERVATION: 観測A\nEVIDENCE: DIRECT 根拠A\nUNKNOWN: なし\n[/STUDIO_RESULT]\n以上、[STUDIO_RESULT] の形式で答えました。",
+   "expected": {
+    "status": "OK",
+    "reason": null,
+    "warnings": [],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "SOURCE_ACCESS": "S1=DIRECT",
+     "CONDITION": "model X",
+     "OBSERVATION": "観測A",
+     "EVIDENCE": "DIRECT 根拠A",
+     "UNKNOWN": "なし"
+    },
+    "missing": [],
+    "selected": "c1",
+    "candidates": {
+     "c1": "SELECTED",
+     "c2": "NOT_STRUCTURAL"
+    },
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    },
+    {
+     "closed": false,
+     "keySet": [],
+     "placeholder": {},
+     "verdict": "NOT_STRUCTURAL"
+    }
+   ]
+  },
+  {
+   "id": "P-06",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nSOURCE_ACCESS: S1=DIRECT\nCONDITION: model X\nOBSERVATION: 観測A。なお EVIDENCE: の書き方は後述。\nEVIDENCE: DIRECT 根拠A\nUNKNOWN: なし\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "OK",
+    "reason": null,
+    "warnings": [],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "SOURCE_ACCESS": "S1=DIRECT",
+     "CONDITION": "model X",
+     "OBSERVATION": "観測A。なお EVIDENCE: の書き方は後述。",
+     "EVIDENCE": "DIRECT 根拠A",
+     "UNKNOWN": "なし"
+    },
+    "missing": [],
+    "selected": "c1",
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "P-07",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[STUDIO_RESULT]\nFROM: GPT\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nUNKNOWN: なし\nOBSERVATION: 観測A\nCONDITION: model X\nEVIDENCE: DIRECT 根拠A\nSOURCE_ACCESS: S1=DIRECT\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "OK",
+    "reason": null,
+    "warnings": [],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "SOURCE_ACCESS": "S1=DIRECT",
+     "CONDITION": "model X",
+     "OBSERVATION": "観測A",
+     "EVIDENCE": "DIRECT 根拠A",
+     "UNKNOWN": "なし"
+    },
+    "missing": [],
+    "selected": "c1",
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "P-08",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nSOURCE_ACCESS: S1=DIRECT\nCONDITION: model X\nOBSERVATION: 観測A\nEVIDENCE: DIRECT 根拠A\nUNKNOWN: なし",
+   "expected": {
+    "status": "UNCONFIRMED",
+    "reason": null,
+    "warnings": [
+     "UNCLOSED"
+    ],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "SOURCE_ACCESS": "S1=DIRECT",
+     "CONDITION": "model X",
+     "OBSERVATION": "観測A",
+     "EVIDENCE": "DIRECT 根拠A",
+     "UNKNOWN": "なし"
+    },
+    "missing": [],
+    "selected": "c1",
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": false,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "P-09",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nSOURCE_ACCESS: S1=DIRECT\nCONDITION: model X\nOBSERVATION: 観測A\nUNKNOWN: なし\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "PARTIAL",
+    "reason": null,
+    "warnings": [],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "SOURCE_ACCESS": "S1=DIRECT",
+     "CONDITION": "model X",
+     "OBSERVATION": "観測A",
+     "UNKNOWN": "なし"
+    },
+    "missing": [
+     "EVIDENCE"
+    ],
+    "selected": "c1",
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "P-10",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "観測の結果、資料は読めました。根拠は本文です。",
+   "expected": null,
+   "candidatesFull": []
+  },
+  {
+   "id": "P-11",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nSOURCE_ACCESS: S1=DIRECT\nCONDITION: model X\n観測: 観測A\n根拠: DIRECT 根拠A\nUNKNOWN: なし\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "PARTIAL",
+    "reason": null,
+    "warnings": [
+     "UNRECOGNIZED_LABEL:観測",
+     "UNRECOGNIZED_LABEL:根拠",
+     "CLASSIFICATION_UNCERTAIN"
+    ],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "SOURCE_ACCESS": "S1=DIRECT",
+     "CONDITION": "model X\n観測: 観測A\n根拠: DIRECT 根拠A",
+     "UNKNOWN": "なし"
+    },
+    "missing": [
+     "OBSERVATION",
+     "EVIDENCE"
+    ],
+    "selected": "c1",
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "P-12",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[STUDIO_RESULT]\nCASE: CASE-T\nTASK: WRONG-TASK\nFROM: GPT\nSOURCE_ACCESS: S1=DIRECT\nCONDITION: model X\nOBSERVATION: 観測A\nEVIDENCE: DIRECT 根拠A\nUNKNOWN: なし\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "OK",
+    "reason": null,
+    "warnings": [],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "WRONG-TASK",
+     "FROM": "GPT",
+     "SOURCE_ACCESS": "S1=DIRECT",
+     "CONDITION": "model X",
+     "OBSERVATION": "観測A",
+     "EVIDENCE": "DIRECT 根拠A",
+     "UNKNOWN": "なし"
+    },
+    "missing": [],
+    "selected": "c1",
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "P-14a",
+   "tag": "STUDIO_SYNTHESIS",
+   "keys": "SYNTH",
+   "input": "[STUDIO_SYNTHESIS] CASE: CASE-T TASK: CASE-T-SYN FROM: GPT COMMON: 共通C DIFFERENCES: 差D | ORIGIN: SOURCE UNKNOWN: 不明U HOLD: 保留H EXECUTION_NEEDS: 必要E NEXT_TASK: 次N GATE_QUESTION: 問G [/STUDIO_SYNTHESIS]",
+   "expected": {
+    "status": "OK",
+    "reason": null,
+    "warnings": [],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-SYN",
+     "FROM": "GPT",
+     "COMMON": "共通C",
+     "DIFFERENCES": "差D | ORIGIN: SOURCE",
+     "UNKNOWN": "不明U",
+     "HOLD": "保留H",
+     "EXECUTION_NEEDS": "必要E",
+     "NEXT_TASK": "次N",
+     "GATE_QUESTION": "問G"
+    },
+    "missing": [],
+    "selected": "c1",
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "COMMON",
+      "DIFFERENCES",
+      "UNKNOWN",
+      "HOLD",
+      "EXECUTION_NEEDS",
+      "NEXT_TASK",
+      "GATE_QUESTION"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "P-14b",
+   "tag": "STUDIO_SYNTHESIS",
+   "keys": "SYNTH",
+   "input": "形式:\n[STUDIO_SYNTHESIS]\nCASE: (CASE)\nTASK: (TASK)\nFROM: (名前)\nCOMMON: (共通)\nDIFFERENCES: (相違)\nUNKNOWN: (不明)\nHOLD: (保留)\nEXECUTION_NEEDS: (必要)\nNEXT_TASK: (次)\nGATE_QUESTION: (問い)\n[/STUDIO_SYNTHESIS]\n回答:\n[STUDIO_SYNTHESIS]\nCASE: CASE-T\nTASK: CASE-T-SYN\nFROM: GPT\nCOMMON: 共通C\nDIFFERENCES: 差D | ORIGIN: SOURCE\nUNKNOWN: 不明U\nHOLD: 保留H\nEXECUTION_NEEDS: 必要E\nNEXT_TASK: 次N\nGATE_QUESTION: 問G\n[/STUDIO_SYNTHESIS]",
+   "expected": {
+    "status": "OK",
+    "reason": null,
+    "warnings": [],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-SYN",
+     "FROM": "GPT",
+     "COMMON": "共通C",
+     "DIFFERENCES": "差D | ORIGIN: SOURCE",
+     "UNKNOWN": "不明U",
+     "HOLD": "保留H",
+     "EXECUTION_NEEDS": "必要E",
+     "NEXT_TASK": "次N",
+     "GATE_QUESTION": "問G"
+    },
+    "missing": [],
+    "selected": "c2",
+    "candidates": {
+     "c1": "TEMPLATE",
+     "c2": "SELECTED"
+    },
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "COMMON",
+      "DIFFERENCES",
+      "UNKNOWN",
+      "HOLD",
+      "EXECUTION_NEEDS",
+      "NEXT_TASK",
+      "GATE_QUESTION"
+     ],
+     "placeholder": {
+      "CASE": "PARENTHESIZED",
+      "TASK": "PARENTHESIZED",
+      "FROM": "PARENTHESIZED",
+      "COMMON": "PARENTHESIZED",
+      "DIFFERENCES": "PARENTHESIZED",
+      "UNKNOWN": "PARENTHESIZED",
+      "HOLD": "PARENTHESIZED",
+      "EXECUTION_NEEDS": "PARENTHESIZED",
+      "NEXT_TASK": "PARENTHESIZED",
+      "GATE_QUESTION": "PARENTHESIZED"
+     },
+     "verdict": "TEMPLATE"
+    },
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "COMMON",
+      "DIFFERENCES",
+      "UNKNOWN",
+      "HOLD",
+      "EXECUTION_NEEDS",
+      "NEXT_TASK",
+      "GATE_QUESTION"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "N-01",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nSOURCE_ACCESS: S1=DIRECT\nCONDITION: model X\nOBSERVATION: 観測A\nEVIDENCE: DIRECT 根拠A\nUNKNOWN: なし\n[/STUDIO_RESULT]\n書き直します。\n[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nSOURCE_ACCESS: S1=DIRECT\nCONDITION: model X\nOBSERVATION: 観測B\nEVIDENCE: DIRECT 根拠B\nUNKNOWN: なし\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "PARSE_FAILED",
+    "reason": "AMBIGUOUS_MULTIPLE_BLOCKS",
+    "warnings": [],
+    "fields": {},
+    "missing": [
+     "CASE",
+     "TASK",
+     "FROM",
+     "SOURCE_ACCESS",
+     "CONDITION",
+     "OBSERVATION",
+     "EVIDENCE",
+     "UNKNOWN"
+    ],
+    "selected": null,
+    "candidates": {
+     "c1": "VALID_NOT_SELECTED",
+     "c2": "VALID_NOT_SELECTED"
+    },
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "VALID_NOT_SELECTED"
+    },
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "VALID_NOT_SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "N-02",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[STUDIO_RESULT]\nCASE: (CASE)\nTASK: (TASK)\nFROM: (名前)\nSOURCE_ACCESS: (状態)\nCONDITION: (条件)\nOBSERVATION: (観測)\nEVIDENCE: (根拠)\nUNKNOWN: (不明)\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "PARSE_FAILED",
+    "reason": "TEMPLATE_ONLY",
+    "warnings": [],
+    "fields": {},
+    "missing": [
+     "CASE",
+     "TASK",
+     "FROM",
+     "SOURCE_ACCESS",
+     "CONDITION",
+     "OBSERVATION",
+     "EVIDENCE",
+     "UNKNOWN"
+    ],
+    "selected": null,
+    "candidates": {
+     "c1": "TEMPLATE"
+    },
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {
+      "CASE": "PARENTHESIZED",
+      "TASK": "PARENTHESIZED",
+      "FROM": "PARENTHESIZED",
+      "SOURCE_ACCESS": "PARENTHESIZED",
+      "CONDITION": "PARENTHESIZED",
+      "OBSERVATION": "PARENTHESIZED",
+      "EVIDENCE": "PARENTHESIZED",
+      "UNKNOWN": "PARENTHESIZED"
+     },
+     "verdict": "TEMPLATE"
+    }
+   ]
+  },
+  {
+   "id": "N-03",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nSOURCE_ACCESS: S1=DIRECT\nCONDITION: model X\nOBSERVATION: 観測A\nEVIDENCE: DIRECT 根拠A\nUNKNOWN: (未確認)\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "OK",
+    "reason": null,
+    "warnings": [
+     "PARENTHESIZED_VALUE:UNKNOWN"
+    ],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "SOURCE_ACCESS": "S1=DIRECT",
+     "CONDITION": "model X",
+     "OBSERVATION": "観測A",
+     "EVIDENCE": "DIRECT 根拠A",
+     "UNKNOWN": "(未確認)"
+    },
+    "missing": [],
+    "selected": "c1",
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {
+      "UNKNOWN": "PARENTHESIZED"
+     },
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "N-04",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[STUDIO_RESULT]…[/STUDIO_RESULT] の形式で返します。\n[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nSOURCE_ACCESS: S1=DIRECT\nCONDITION: model X\nOBSERVATION: 観測A\nEVIDENCE: DIRECT 根拠A\nUNKNOWN: なし\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "OK",
+    "reason": null,
+    "warnings": [],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "SOURCE_ACCESS": "S1=DIRECT",
+     "CONDITION": "model X",
+     "OBSERVATION": "観測A",
+     "EVIDENCE": "DIRECT 根拠A",
+     "UNKNOWN": "なし"
+    },
+    "missing": [],
+    "selected": "c2",
+    "candidates": {
+     "c1": "NOT_STRUCTURAL",
+     "c2": "SELECTED"
+    },
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [],
+     "placeholder": {},
+     "verdict": "NOT_STRUCTURAL"
+    },
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "N-05",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "```text\n[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nSOURCE_ACCESS: S1=DIRECT\nCONDITION: model X\nOBSERVATION: 観測A\nEVIDENCE: DIRECT 根拠A\nUNKNOWN: なし\n[/STUDIO_RESULT]\n```",
+   "expected": {
+    "status": "OK",
+    "reason": null,
+    "warnings": [],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "SOURCE_ACCESS": "S1=DIRECT",
+     "CONDITION": "model X",
+     "OBSERVATION": "観測A",
+     "EVIDENCE": "DIRECT 根拠A",
+     "UNKNOWN": "なし"
+    },
+    "missing": [],
+    "selected": "c1",
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "N-06",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[studio_result]\ncase: CASE-T\ntask: CASE-T-OBS-GPT\nfrom: GPT\nsource_access: S1=DIRECT\ncondition: model X\nobservation: 観測A\nevidence: DIRECT 根拠A\nunknown: なし\n[/studio_result]",
+   "expected": {
+    "status": "OK",
+    "reason": null,
+    "warnings": [],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "SOURCE_ACCESS": "S1=DIRECT",
+     "CONDITION": "model X",
+     "OBSERVATION": "観測A",
+     "EVIDENCE": "DIRECT 根拠A",
+     "UNKNOWN": "なし"
+    },
+    "missing": [],
+    "selected": "c1",
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "N-07",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nSOURCE_ACCESS: S1=DIRECT\nCONDITION: model X\nOBSERVATION: 観測A。[STUDIO_RESULT] という書式です。\nEVIDENCE: DIRECT 根拠A\nUNKNOWN: なし\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "PARSE_FAILED",
+    "reason": "UNCLOSED_FOLLOWED_BY_TAG",
+    "warnings": [],
+    "fields": {},
+    "missing": [
+     "CASE",
+     "TASK",
+     "FROM",
+     "SOURCE_ACCESS",
+     "CONDITION",
+     "OBSERVATION",
+     "EVIDENCE",
+     "UNKNOWN"
+    ],
+    "selected": null,
+    "candidates": {
+     "c1": "VALID_NOT_SELECTED",
+     "c2": "NOT_STRUCTURAL"
+    },
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": false,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION"
+     ],
+     "placeholder": {},
+     "verdict": "VALID_NOT_SELECTED"
+    },
+    {
+     "closed": true,
+     "keySet": [
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "NOT_STRUCTURAL"
+    }
+   ]
+  },
+  {
+   "id": "N-08",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "依頼文の形式:\n[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nSOURCE_ACCESS: S1=DIRECT|READABLE|INACCESSIBLE|UNKNOWN（理由）\nCONDITION: モデル / 使えた道具 / ファイル可否 / Web可否 / 事前知識の有無\nOBSERVATION: 観測したこと・答え\nEVIDENCE: 根拠（DIRECT/REPORTED/INFERENCE）\nUNKNOWN: 確かめられなかったこと\n[/STUDIO_RESULT]\n回答:\n[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nSOURCE_ACCESS: S1=DIRECT\nCONDITION: model X\nOBSERVATION: 観測A\nEVIDENCE: DIRECT 根拠A\nUNKNOWN: なし\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "OK",
+    "reason": null,
+    "warnings": [],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "SOURCE_ACCESS": "S1=DIRECT",
+     "CONDITION": "model X",
+     "OBSERVATION": "観測A",
+     "EVIDENCE": "DIRECT 根拠A",
+     "UNKNOWN": "なし"
+    },
+    "missing": [],
+    "selected": "c2",
+    "candidates": {
+     "c1": "TEMPLATE",
+     "c2": "SELECTED"
+    },
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {
+      "SOURCE_ACCESS": "TEMPLATE",
+      "CONDITION": "TEMPLATE",
+      "OBSERVATION": "TEMPLATE",
+      "EVIDENCE": "TEMPLATE",
+      "UNKNOWN": "TEMPLATE"
+     },
+     "verdict": "TEMPLATE"
+    },
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "N-09",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[STUDIO_RESULT]\nCASE: CASE-T\nOBSERVATION: 観測A\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "PARSE_FAILED",
+    "reason": "NO_STRUCTURAL_CANDIDATE",
+    "warnings": [],
+    "fields": {},
+    "missing": [
+     "CASE",
+     "TASK",
+     "FROM",
+     "SOURCE_ACCESS",
+     "CONDITION",
+     "OBSERVATION",
+     "EVIDENCE",
+     "UNKNOWN"
+    ],
+    "selected": null,
+    "candidates": {
+     "c1": "NOT_STRUCTURAL"
+    },
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "OBSERVATION"
+     ],
+     "placeholder": {},
+     "verdict": "NOT_STRUCTURAL"
+    }
+   ]
+  },
+  {
+   "id": "N-10a",
+   "tag": "STUDIO_SYNTHESIS",
+   "keys": "SYNTH",
+   "input": "[STUDIO_SYNTHESIS]\nCASE: CASE-T\nTASK: CASE-T-SYN\nFROM: GPT\nCOMMON: 共通C\nDIFFERENCES: 差D\nUNKNOWN: 不明U\nHOLD: 保留H\nEXECUTION_NEEDS: 必要E\nNEXT_TASK: 次N\nGATE_QUESTION: 問G\n[/STUDIO_SYNTHESIS]\n[STUDIO_SYNTHESIS]\nCASE: CASE-T\nTASK: CASE-T-SYN\nFROM: GPT\nCOMMON: 共通C2\nDIFFERENCES: 差D2\nUNKNOWN: 不明U\nHOLD: 保留H\nEXECUTION_NEEDS: 必要E\nNEXT_TASK: 次N\nGATE_QUESTION: 問G\n[/STUDIO_SYNTHESIS]",
+   "expected": {
+    "status": "PARSE_FAILED",
+    "reason": "AMBIGUOUS_MULTIPLE_BLOCKS",
+    "warnings": [],
+    "fields": {},
+    "missing": [
+     "CASE",
+     "TASK",
+     "FROM",
+     "COMMON",
+     "DIFFERENCES",
+     "UNKNOWN",
+     "HOLD",
+     "EXECUTION_NEEDS",
+     "NEXT_TASK",
+     "GATE_QUESTION"
+    ],
+    "selected": null,
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "COMMON",
+      "DIFFERENCES",
+      "UNKNOWN",
+      "HOLD",
+      "EXECUTION_NEEDS",
+      "NEXT_TASK",
+      "GATE_QUESTION"
+     ],
+     "placeholder": {},
+     "verdict": "VALID_NOT_SELECTED"
+    },
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "COMMON",
+      "DIFFERENCES",
+      "UNKNOWN",
+      "HOLD",
+      "EXECUTION_NEEDS",
+      "NEXT_TASK",
+      "GATE_QUESTION"
+     ],
+     "placeholder": {},
+     "verdict": "VALID_NOT_SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "N-10b",
+   "tag": "STUDIO_SYNTHESIS",
+   "keys": "SYNTH",
+   "input": "[STUDIO_SYNTHESIS]\nCASE: (CASE)\nTASK: (TASK)\nFROM: (名前)\nCOMMON: (共通)\nDIFFERENCES: (相違)\nUNKNOWN: (不明)\nHOLD: (保留)\nEXECUTION_NEEDS: (必要)\nNEXT_TASK: (次)\nGATE_QUESTION: (問い)\n[/STUDIO_SYNTHESIS]",
+   "expected": {
+    "status": "PARSE_FAILED",
+    "reason": "TEMPLATE_ONLY",
+    "warnings": [],
+    "fields": {},
+    "missing": [
+     "CASE",
+     "TASK",
+     "FROM",
+     "COMMON",
+     "DIFFERENCES",
+     "UNKNOWN",
+     "HOLD",
+     "EXECUTION_NEEDS",
+     "NEXT_TASK",
+     "GATE_QUESTION"
+    ],
+    "selected": null,
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "COMMON",
+      "DIFFERENCES",
+      "UNKNOWN",
+      "HOLD",
+      "EXECUTION_NEEDS",
+      "NEXT_TASK",
+      "GATE_QUESTION"
+     ],
+     "placeholder": {
+      "CASE": "PARENTHESIZED",
+      "TASK": "PARENTHESIZED",
+      "FROM": "PARENTHESIZED",
+      "COMMON": "PARENTHESIZED",
+      "DIFFERENCES": "PARENTHESIZED",
+      "UNKNOWN": "PARENTHESIZED",
+      "HOLD": "PARENTHESIZED",
+      "EXECUTION_NEEDS": "PARENTHESIZED",
+      "NEXT_TASK": "PARENTHESIZED",
+      "GATE_QUESTION": "PARENTHESIZED"
+     },
+     "verdict": "TEMPLATE"
+    }
+   ]
+  },
+  {
+   "id": "N-10c",
+   "tag": "STUDIO_DONE",
+   "keys": "DONE",
+   "input": "[STUDIO_DONE]\nCASE: CASE-T\nTASK: CASE-T-NEXT\nFROM: Claude Code\nCHANGED: 変更したもの（ファイル・commit等）\nVERIFIED: 実際に確かめたこと\nUNKNOWN: 確かめられなかったこと\nNEXT: 次に人間が決めること\n[/STUDIO_DONE]",
+   "expected": {
+    "status": "PARSE_FAILED",
+    "reason": "TEMPLATE_ONLY",
+    "warnings": [],
+    "fields": {},
+    "missing": [
+     "CASE",
+     "TASK",
+     "FROM",
+     "CHANGED",
+     "VERIFIED",
+     "UNKNOWN",
+     "NEXT"
+    ],
+    "selected": null,
+    "candidates": {
+     "c1": "TEMPLATE"
+    },
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "CHANGED",
+      "VERIFIED",
+      "UNKNOWN",
+      "NEXT"
+     ],
+     "placeholder": {
+      "CHANGED": "TEMPLATE",
+      "VERIFIED": "TEMPLATE",
+      "UNKNOWN": "TEMPLATE",
+      "NEXT": "TEMPLATE"
+     },
+     "verdict": "TEMPLATE"
+    }
+   ]
+  },
+  {
+   "id": "N-11a",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nSOURCE_ACCESS: S1=DIRECT\nCONDITION: model X\nOBSERVATION: 観測A\nEVIDENCE: DIRECT 根拠A\nUNKNOWN: なし\nOBSERVATION: 観測A\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "OK",
+    "reason": null,
+    "warnings": [
+     "DUPLICATE_KEY:OBSERVATION"
+    ],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "SOURCE_ACCESS": "S1=DIRECT",
+     "CONDITION": "model X",
+     "OBSERVATION": "観測A",
+     "EVIDENCE": "DIRECT 根拠A",
+     "UNKNOWN": "なし"
+    },
+    "missing": [],
+    "selected": "c1",
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "N-11b",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nSOURCE_ACCESS: S1=DIRECT\nCONDITION: model X\nOBSERVATION: 観測A\nEVIDENCE: DIRECT 根拠A\nUNKNOWN: なし\nOBSERVATION: 観測B\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "OK",
+    "reason": null,
+    "warnings": [
+     "DUPLICATE_KEY:OBSERVATION"
+    ],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "SOURCE_ACCESS": "S1=DIRECT",
+     "CONDITION": "model X",
+     "OBSERVATION": "観測A",
+     "EVIDENCE": "DIRECT 根拠A",
+     "UNKNOWN": "なし"
+    },
+    "missing": [],
+    "selected": "c1",
+    "conflicts": [
+     "OBSERVATION"
+    ]
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "N-12",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nOBSERVATION: （なし）\nUNKNOWN: （なし）\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "PARSE_FAILED",
+    "reason": "TEMPLATE_ONLY",
+    "warnings": [],
+    "fields": {},
+    "missing": [
+     "CASE",
+     "TASK",
+     "FROM",
+     "SOURCE_ACCESS",
+     "CONDITION",
+     "OBSERVATION",
+     "EVIDENCE",
+     "UNKNOWN"
+    ],
+    "selected": null,
+    "candidates": {
+     "c1": "TEMPLATE"
+    },
+    "conflicts": []
+   },
+   "note": "D4 の既知の制約（受け入れ済み）",
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "OBSERVATION",
+      "UNKNOWN"
+     ],
+     "placeholder": {
+      "OBSERVATION": "PARENTHESIZED",
+      "UNKNOWN": "PARENTHESIZED"
+     },
+     "verdict": "TEMPLATE"
+    }
+   ]
+  },
+  {
+   "id": "N-13",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[STUDIO_RESULT]\nOBSERVATION: a\nOBSERVATION: b\nOBSERVATION: c\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "PARSE_FAILED",
+    "reason": "NO_STRUCTURAL_CANDIDATE",
+    "warnings": [],
+    "fields": {},
+    "missing": [
+     "CASE",
+     "TASK",
+     "FROM",
+     "SOURCE_ACCESS",
+     "CONDITION",
+     "OBSERVATION",
+     "EVIDENCE",
+     "UNKNOWN"
+    ],
+    "selected": null,
+    "candidates": {
+     "c1": "NOT_STRUCTURAL"
+    },
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "OBSERVATION"
+     ],
+     "placeholder": {},
+     "verdict": "NOT_STRUCTURAL"
+    }
+   ]
+  },
+  {
+   "id": "N-14",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nSOURCE_ACCESS: S1=DIRECT\nCONDITION: model X\nOBSERVATION: 観測A（閉じは [/STUDIO_RESULT] と書く）\nEVIDENCE: DIRECT 根拠A\nUNKNOWN: なし\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "PARTIAL",
+    "reason": null,
+    "warnings": [],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "SOURCE_ACCESS": "S1=DIRECT",
+     "CONDITION": "model X",
+     "OBSERVATION": "観測A（閉じは"
+    },
+    "missing": [
+     "EVIDENCE",
+     "UNKNOWN"
+    ],
+    "selected": "c1",
+    "conflicts": []
+   },
+   "note": "既知の制約（D5）",
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "N-15",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[ STUDIO_RESULT ]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nOBSERVATION: 観測A\n[/STUDIO_RESULT]",
+   "expected": null,
+   "candidatesFull": []
+  },
+  {
+   "id": "N-16",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[STUDIO_RESULT]\nCASE: a\nTASK: b\nFROM: c\nOBSERVATION: x\n[STUDIO_RESULT]\nCASE: a2\nTASK: b2\nFROM: c2\nOBSERVATION: y\n[/STUDIO_RESULT]\n後書き\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "PARSE_FAILED",
+    "reason": "AMBIGUOUS_MULTIPLE_BLOCKS",
+    "warnings": [],
+    "fields": {},
+    "missing": [
+     "CASE",
+     "TASK",
+     "FROM",
+     "SOURCE_ACCESS",
+     "CONDITION",
+     "OBSERVATION",
+     "EVIDENCE",
+     "UNKNOWN"
+    ],
+    "selected": null,
+    "candidates": {
+     "c1": "VALID_NOT_SELECTED",
+     "c2": "VALID_NOT_SELECTED"
+    },
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": false,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "OBSERVATION"
+     ],
+     "placeholder": {},
+     "verdict": "VALID_NOT_SELECTED"
+    },
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "OBSERVATION"
+     ],
+     "placeholder": {},
+     "verdict": "VALID_NOT_SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "N-17",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nSOURCE_ACCESS: N/A（理由）\nCONDITION: モデル  /  使えた道具 / ファイル可否 / Web可否 / 事前知識の有無\nOBSERVATION: 観測したこと・答え\nEVIDENCE: 根拠（DIRECT/REPORTED/INFERENCE）\nUNKNOWN: 確かめられなかったこと\n[/STUDIO_RESULT]\n[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nSOURCE_ACCESS: S1=DIRECT\nCONDITION: model X\nOBSERVATION: 観測A\nEVIDENCE: DIRECT 根拠A\nUNKNOWN: なし\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "OK",
+    "reason": null,
+    "warnings": [],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "SOURCE_ACCESS": "S1=DIRECT",
+     "CONDITION": "model X",
+     "OBSERVATION": "観測A",
+     "EVIDENCE": "DIRECT 根拠A",
+     "UNKNOWN": "なし"
+    },
+    "missing": [],
+    "selected": "c2",
+    "candidates": {
+     "c1": "TEMPLATE",
+     "c2": "SELECTED"
+    },
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {
+      "SOURCE_ACCESS": "TEMPLATE",
+      "CONDITION": "TEMPLATE",
+      "OBSERVATION": "TEMPLATE",
+      "EVIDENCE": "TEMPLATE",
+      "UNKNOWN": "TEMPLATE"
+     },
+     "verdict": "TEMPLATE"
+    },
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "N-18",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nSOURCE_ACCESS: S1=DIRECT\nCONDITION: model X\nOBSERVATION: 観測したこと・答えは次のとおり：Aです\nEVIDENCE: DIRECT 根拠A\nUNKNOWN: なし\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "OK",
+    "reason": null,
+    "warnings": [],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "SOURCE_ACCESS": "S1=DIRECT",
+     "CONDITION": "model X",
+     "OBSERVATION": "観測したこと・答えは次のとおり:Aです",
+     "EVIDENCE": "DIRECT 根拠A",
+     "UNKNOWN": "なし"
+    },
+    "missing": [],
+    "selected": "c1",
+    "conflicts": []
+   },
+   "note": "部分一致は TEMPLATE_VALUE にしない。全角コロンは N-1 で半角になる（版A・B と同じ挙動）",
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "N-19",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nSOURCE_ACCESS: S1=DIRECT\nCONDITION: model X\nOBSERVATION: 観測A\nメモ: x\n補足: y\nEVIDENCE: DIRECT 根拠A 参考: z\nUNKNOWN: なし\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "OK",
+    "reason": null,
+    "warnings": [
+     "UNRECOGNIZED_LABEL:メモ",
+     "UNRECOGNIZED_LABEL:補足",
+     "CLASSIFICATION_UNCERTAIN"
+    ],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "SOURCE_ACCESS": "S1=DIRECT",
+     "CONDITION": "model X",
+     "OBSERVATION": "観測A\nメモ: x\n補足: y",
+     "EVIDENCE": "DIRECT 根拠A 参考: z",
+     "UNKNOWN": "なし"
+    },
+    "missing": [],
+    "selected": "c1",
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "N-20",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nSOURCE_ACCESS: S1=DIRECT\nCONDITION: model X\nOBSERVATION: 観測A\nEVIDENCE: DIRECT 根拠A\nUNKNOWN: な",
+   "expected": {
+    "status": "UNCONFIRMED",
+    "reason": null,
+    "warnings": [
+     "UNCLOSED"
+    ],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "SOURCE_ACCESS": "S1=DIRECT",
+     "CONDITION": "model X",
+     "OBSERVATION": "観測A",
+     "EVIDENCE": "DIRECT 根拠A",
+     "UNKNOWN": "な"
+    },
+    "missing": [],
+    "selected": "c1",
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": false,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "N-21",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nSOURCE_ACCESS: S1=DIRECT\nCONDITION: model X\nOBSERVATION: 観測したこと・答え\nEVIDENCE: DIRECT 根拠A\nUNKNOWN: なし\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "OK",
+    "reason": null,
+    "warnings": [
+     "TEMPLATE_VALUE:OBSERVATION"
+    ],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "SOURCE_ACCESS": "S1=DIRECT",
+     "CONDITION": "model X",
+     "OBSERVATION": "観測したこと・答え",
+     "EVIDENCE": "DIRECT 根拠A",
+     "UNKNOWN": "なし"
+    },
+    "missing": [],
+    "selected": "c1",
+    "conflicts": []
+   },
+   "note": "一部だけ見本の文言 → 候補は外さず、確認必須の警告（D8）",
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {
+      "OBSERVATION": "TEMPLATE"
+     },
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "R-01",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "note": "D10: 識別キーだけ",
+   "input": "[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "PARSE_FAILED",
+    "reason": "NO_CONTENT_FIELDS",
+    "warnings": [],
+    "fields": {},
+    "missing": [
+     "CASE",
+     "TASK",
+     "FROM",
+     "SOURCE_ACCESS",
+     "CONDITION",
+     "OBSERVATION",
+     "EVIDENCE",
+     "UNKNOWN"
+    ],
+    "selected": null,
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM"
+     ],
+     "placeholder": {},
+     "verdict": "NO_CONTENT"
+    }
+   ]
+  },
+  {
+   "id": "R-02",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "note": "D10: 識別キー＋内容1つは有効",
+   "input": "[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nOBSERVATION: 観測A\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "PARTIAL",
+    "reason": null,
+    "warnings": [],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "OBSERVATION": "観測A"
+    },
+    "missing": [
+     "SOURCE_ACCESS",
+     "CONDITION",
+     "EVIDENCE",
+     "UNKNOWN"
+    ],
+    "selected": "c1",
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "OBSERVATION"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "R-03",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "note": "D10: 識別キーだけの候補＋本物",
+   "input": "[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\n[/STUDIO_RESULT]\n[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nSOURCE_ACCESS: S1=DIRECT\nCONDITION: model X\nOBSERVATION: 観測A\nEVIDENCE: DIRECT 根拠A\nUNKNOWN: なし\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "OK",
+    "reason": null,
+    "warnings": [],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "SOURCE_ACCESS": "S1=DIRECT",
+     "CONDITION": "model X",
+     "OBSERVATION": "観測A",
+     "EVIDENCE": "DIRECT 根拠A",
+     "UNKNOWN": "なし"
+    },
+    "missing": [],
+    "selected": "c2",
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM"
+     ],
+     "placeholder": {},
+     "verdict": "NO_CONTENT"
+    },
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "R-04",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "note": "D10: 識別キーだけ（重複あり）",
+   "input": "[STUDIO_RESULT]\nCASE: CASE-T\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "PARSE_FAILED",
+    "reason": "NO_CONTENT_FIELDS",
+    "warnings": [],
+    "fields": {},
+    "missing": [
+     "CASE",
+     "TASK",
+     "FROM",
+     "SOURCE_ACCESS",
+     "CONDITION",
+     "OBSERVATION",
+     "EVIDENCE",
+     "UNKNOWN"
+    ],
+    "selected": null,
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM"
+     ],
+     "placeholder": {},
+     "verdict": "NO_CONTENT"
+    }
+   ]
+  },
+  {
+   "id": "R-05",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "note": "X-2: 順不同の重複は位置が最も前の値",
+   "input": "[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nOBSERVATION: x\nSOURCE_ACCESS: S1=DIRECT\nCONDITION: model X\nOBSERVATION: y\nEVIDENCE: DIRECT 根拠A\nUNKNOWN: なし\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "OK",
+    "reason": null,
+    "warnings": [
+     "DUPLICATE_KEY:OBSERVATION"
+    ],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "SOURCE_ACCESS": "S1=DIRECT",
+     "CONDITION": "model X",
+     "OBSERVATION": "x",
+     "EVIDENCE": "DIRECT 根拠A",
+     "UNKNOWN": "なし"
+    },
+    "missing": [],
+    "selected": "c1",
+    "conflicts": [
+     "OBSERVATION"
+    ]
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "R-06",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "note": "重複は大文字小文字を区別しない（同じ値）",
+   "input": "[STUDIO_RESULT]\nCASE: CASE-T\nTASK: CASE-T-OBS-GPT\nFROM: GPT\nSOURCE_ACCESS: S1=DIRECT\nCONDITION: model X\nOBSERVATION: 観測A\nEVIDENCE: DIRECT 根拠A\nUNKNOWN: なし\nobservation: 観測A\n[/STUDIO_RESULT]",
+   "expected": {
+    "status": "OK",
+    "reason": null,
+    "warnings": [
+     "DUPLICATE_KEY:OBSERVATION"
+    ],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "SOURCE_ACCESS": "S1=DIRECT",
+     "CONDITION": "model X",
+     "OBSERVATION": "観測A",
+     "EVIDENCE": "DIRECT 根拠A",
+     "UNKNOWN": "なし"
+    },
+    "missing": [],
+    "selected": "c1",
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "SOURCE_ACCESS",
+      "CONDITION",
+      "OBSERVATION",
+      "EVIDENCE",
+      "UNKNOWN"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    }
+   ]
+  },
+  {
+   "id": "R-07",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "note": "D11=A の既知の制約: 1行形式の中の重複は検出しない（値に含まれる）",
+   "input": "[STUDIO_RESULT] CASE: CASE-T TASK: CASE-T-OBS-GPT FROM: GPT OBSERVATION: a OBSERVATION: b [/STUDIO_RESULT]",
+   "expected": {
+    "status": "PARTIAL",
+    "reason": null,
+    "warnings": [],
+    "fields": {
+     "CASE": "CASE-T",
+     "TASK": "CASE-T-OBS-GPT",
+     "FROM": "GPT",
+     "OBSERVATION": "a OBSERVATION: b"
+    },
+    "missing": [
+     "SOURCE_ACCESS",
+     "CONDITION",
+     "EVIDENCE",
+     "UNKNOWN"
+    ],
+    "selected": "c1",
+    "conflicts": []
+   },
+   "candidatesFull": [
+    {
+     "closed": true,
+     "keySet": [
+      "CASE",
+      "TASK",
+      "FROM",
+      "OBSERVATION"
+     ],
+     "placeholder": {},
+     "verdict": "SELECTED"
+    }
+   ]
+  }
+ ],
+ "eligibleCases": [
+  {
+   "id": "E-01",
+   "title": "旧形式（status なし）",
+   "result": {
+    "fields": {
+     "OBSERVATION": "x"
+    }
+   },
+   "opts": {},
+   "expected": true
+  },
+  {
+   "id": "E-02",
+   "title": "OK 警告なし",
+   "result": {
+    "status": "OK",
+    "warnings": [],
+    "conflicts": []
+   },
+   "opts": {},
+   "expected": true
+  },
+  {
+   "id": "E-03",
+   "title": "PARTIAL",
+   "result": {
+    "status": "PARTIAL",
+    "warnings": [],
+    "conflicts": []
+   },
+   "opts": {},
+   "expected": true
+  },
+  {
+   "id": "E-04",
+   "title": "UNCONFIRMED 未確定",
+   "result": {
+    "status": "UNCONFIRMED",
+    "warnings": [
+     "UNCLOSED"
+    ],
+    "conflicts": []
+   },
+   "opts": {},
+   "expected": false
+  },
+  {
+   "id": "E-05",
+   "title": "UNCONFIRMED 確定済み",
+   "result": {
+    "status": "UNCONFIRMED",
+    "warnings": [
+     "UNCLOSED"
+    ],
+    "conflicts": [],
+    "confirmation": {
+     "at": "t",
+     "by": "screen",
+     "items": [
+      "UNCLOSED"
+     ]
+    }
+   },
+   "opts": {},
+   "expected": true
+  },
+  {
+   "id": "E-06",
+   "title": "PARSE_FAILED",
+   "result": {
+    "status": "PARSE_FAILED",
+    "reason": "AMBIGUOUS_MULTIPLE_BLOCKS",
+    "warnings": [],
+    "conflicts": []
+   },
+   "opts": {},
+   "expected": false
+  },
+  {
+   "id": "E-07",
+   "title": "括弧の警告だけ",
+   "result": {
+    "status": "OK",
+    "warnings": [
+     "PARENTHESIZED_VALUE:UNKNOWN"
+    ],
+    "conflicts": []
+   },
+   "opts": {},
+   "expected": true
+  },
+  {
+   "id": "E-08",
+   "title": "TEMPLATE_VALUE 未確認",
+   "result": {
+    "status": "OK",
+    "warnings": [
+     "TEMPLATE_VALUE:OBSERVATION"
+    ],
+    "conflicts": []
+   },
+   "opts": {},
+   "expected": false
+  },
+  {
+   "id": "E-09",
+   "title": "TEMPLATE_VALUE 確認済み",
+   "result": {
+    "status": "OK",
+    "warnings": [
+     "TEMPLATE_VALUE:OBSERVATION"
+    ],
+    "conflicts": [],
+    "confirmation": {
+     "at": "t",
+     "by": "screen",
+     "items": [
+      "TEMPLATE_VALUE:OBSERVATION"
+     ]
+    }
+   },
+   "opts": {},
+   "expected": true
+  },
+  {
+   "id": "E-10",
+   "title": "CLASSIFICATION_UNCERTAIN 未確認",
+   "result": {
+    "status": "PARTIAL",
+    "warnings": [
+     "UNRECOGNIZED_LABEL:観測",
+     "CLASSIFICATION_UNCERTAIN"
+    ],
+    "conflicts": []
+   },
+   "opts": {},
+   "expected": false
+  },
+  {
+   "id": "E-11",
+   "title": "重複キー 値が違う 未確認",
+   "result": {
+    "status": "OK",
+    "warnings": [
+     "DUPLICATE_KEY:OBSERVATION"
+    ],
+    "conflicts": [
+     "OBSERVATION"
+    ]
+   },
+   "opts": {},
+   "expected": false
+  },
+  {
+   "id": "E-12",
+   "title": "重複キー 同じ値",
+   "result": {
+    "status": "OK",
+    "warnings": [
+     "DUPLICATE_KEY:OBSERVATION"
+    ],
+    "conflicts": []
+   },
+   "opts": {},
+   "expected": true
+  },
+  {
+   "id": "E-13",
+   "title": "重複キー 値が違う 確認済み",
+   "result": {
+    "status": "OK",
+    "warnings": [
+     "DUPLICATE_KEY:OBSERVATION"
+    ],
+    "conflicts": [
+     "OBSERVATION"
+    ],
+    "confirmation": {
+     "at": "t",
+     "by": "screen",
+     "items": [
+      "DUPLICATE_KEY:OBSERVATION"
+     ]
+    }
+   },
+   "opts": {},
+   "expected": true
+  },
+  {
+   "id": "E-14",
+   "title": "NO_BLOCK 段階1（今のまま適格）",
+   "result": {
+    "status": "NO_BLOCK"
+   },
+   "opts": {
+    "noBlockNeedsConfirmation": false
+   },
+   "expected": true
+  },
+  {
+   "id": "E-15",
+   "title": "NO_BLOCK 段階2 未確定",
+   "result": {
+    "status": "NO_BLOCK"
+   },
+   "opts": {
+    "noBlockNeedsConfirmation": true
+   },
+   "expected": false
+  },
+  {
+   "id": "E-16",
+   "title": "NO_BLOCK 段階2 確定済み",
+   "result": {
+    "status": "NO_BLOCK",
+    "confirmation": {
+     "at": "t",
+     "by": "screen",
+     "items": [
+      "NO_BLOCK"
+     ]
+    }
+   },
+   "opts": {
+    "noBlockNeedsConfirmation": true
+   },
+   "expected": true
+  },
+  {
+   "id": "E-17",
+   "title": "確認の一部だけ（2件中1件）",
+   "result": {
+    "status": "OK",
+    "warnings": [
+     "TEMPLATE_VALUE:OBSERVATION",
+     "CLASSIFICATION_UNCERTAIN"
+    ],
+    "conflicts": [],
+    "confirmation": {
+     "at": "t",
+     "by": "screen",
+     "items": [
+      "TEMPLATE_VALUE:OBSERVATION"
+     ]
+    }
+   },
+   "opts": {},
+   "expected": false
+  },
+  {
+   "id": "E-18",
+   "title": "null（結果なし）",
+   "result": null,
+   "opts": {},
+   "expected": false
+  }
+ ],
+ "positionCases": [
+  {
+   "id": "X-01",
+   "note": "ASCII",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "ab[STUDIO_RESULT]\nCASE: a\nTASK: b\nFROM: c\nOBSERVATION: d\n[/STUDIO_RESULT]",
+   "expected": [
+    {
+     "id": "c1",
+     "start": 2,
+     "end": 57,
+     "closed": true
+    }
+   ]
+  },
+  {
+   "id": "X-02",
+   "note": "サロゲートペア（😀 は UTF-16 で2単位）",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "😀x[STUDIO_RESULT]\nCASE: a\nTASK: b\nFROM: c\nOBSERVATION: 😀d\n[/STUDIO_RESULT]",
+   "expected": [
+    {
+     "id": "c1",
+     "start": 3,
+     "end": 60,
+     "closed": true
+    }
+   ]
+  },
+  {
+   "id": "X-03",
+   "note": "全角タグ・閉じなし（文末まで）",
+   "tag": "STUDIO_RESULT",
+   "keys": "RESULT",
+   "input": "x［STUDIO_RESULT］\nCASE: a\nTASK: b\nFROM: c\nOBSERVATION: d",
+   "expected": [
+    {
+     "id": "c1",
+     "start": 1,
+     "end": 55,
+     "closed": false
+    }
+   ]
+  }
+ ],
+ "expectedVersions": {
+  "ruleVersion": "v2",
+  "templateTableVersion": "TEMPLATE-TABLE-2026-10-12-a"
+ },
+ "changesFromV2": {
+  "P-11": "CONDITION を prefix から全文一致へ（Codex 監査 指摘3）。値は仕様どおり未知ラベル行を含む"
+ },
+ "specAdditions": {
+  "D10": "識別キー（CASE・TASK・FROM）以外のキーが無い候補は verdict NO_CONTENT。有効候補が無く、TEMPLATE が無く NO_CONTENT がある場合の理由は NO_CONTENT_FIELDS",
+  "reasonPriority": "AMBIGUOUS_MULTIPLE_BLOCKS > UNCLOSED_FOLLOWED_BY_TAG > TEMPLATE_ONLY > NO_CONTENT_FIELDS > NO_STRUCTURAL_CANDIDATE",
+  "D11": "キーの認識は版Bと同じ（行頭優先・1行形式も読む）。重複の検出は行頭の繰り返しだけ（大文字小文字は区別しない）。重複がある場合は位置が最も前の値を採用（X-2）。1行形式の中の重複は検出しない（既知の制約）"
+ },
+ "changesFromR2": {
+  "conflictsAddedTo": [
+   "P-01",
+   "P-02",
+   "P-03",
+   "P-04",
+   "P-05",
+   "P-05b",
+   "P-05c",
+   "P-06",
+   "P-07",
+   "P-08",
+   "P-09",
+   "P-11",
+   "P-12",
+   "P-14a",
+   "P-14b",
+   "N-01",
+   "N-02",
+   "N-03",
+   "N-04",
+   "N-05",
+   "N-06",
+   "N-07",
+   "N-08",
+   "N-09",
+   "N-10a",
+   "N-10b",
+   "N-10c",
+   "N-12",
+   "N-13",
+   "N-14",
+   "N-16",
+   "N-17",
+   "N-18",
+   "N-19",
+   "N-20",
+   "N-21",
+   "R-01",
+   "R-02",
+   "R-03",
+   "R-04"
+  ],
+  "reason": "Codex 段階1a-r2 再監査 B: conflicts が期待に無いケースで余分な値を見逃す"
+ }
+}

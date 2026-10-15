@@ -1,0 +1,65 @@
+{
+ "about": "段階1c（依頼記録）の studio_state.js に意図的な不具合を1つずつ入れ、test_1c_cases.js と test_1b_cases.js が不合格を出すか確かめる。mutation_1c.html で再実行できる。",
+ "mutants": [
+  {
+   "id": "C-01",
+   "name": "失敗を記録しても failed にならない",
+   "find": "req.deliveries.some(d => d.status === 'failed') ? 'failed'",
+   "replace": "false ? 'failed'"
+  },
+  {
+   "id": "C-02",
+   "name": "手動コピー（copied）を送付済みと見なさない",
+   "find": "const DELIVERED = ['copied', 'shown', 'queued', 'answered'];",
+   "replace": "const DELIVERED = ['shown', 'queued', 'answered'];"
+  },
+  {
+   "id": "C-03",
+   "name": "今の依頼として最初の記録を返す",
+   "find": "return list.length ? list[list.length - 1] : null;",
+   "replace": "return list.length ? list[0] : null;"
+  },
+  {
+   "id": "C-04",
+   "name": "今の依頼を Task ID で絞らない",
+   "find": "r.kind === kind && r.task === task && ",
+   "replace": "r.kind === kind && "
+  },
+  {
+   "id": "C-05",
+   "name": "送付結果を追記しない",
+   "find": "req.deliveries.push({ at: d.at, status: d.status, connector: d.connector || null, error: d.error || null, retry: !!d.retry });",
+   "replace": ""
+  },
+  {
+   "id": "C-06",
+   "name": "依頼文の本文を保存しない",
+   "find": "task: r.task, gen: r.gen || 1, packet: r.packet,",
+   "replace": "task: r.task, gen: r.gen || 1, packet: null,"
+  },
+  {
+   "id": "C-07",
+   "name": "読むだけで旧 Case に requests を足す",
+   "find": "const requests = c => c.requests || [];",
+   "replace": "const requests = c => c.requests || (c.requests = []);"
+  },
+  {
+   "id": "C-08",
+   "name": "送付前（unsent）も送り直しの対象にする",
+   "find": "const canRetry = (c, kind, name) => deliveryState(currentRequest(c, kind, name)) === 'failed';",
+   "replace": "const canRetry = (c, kind, name) => { const s = deliveryState(currentRequest(c, kind, name)); return s === 'failed' || s === 'unsent'; };"
+  },
+  {
+   "id": "C-09",
+   "name": "失敗の理由を残さない",
+   "find": "error: d.error || null, retry",
+   "replace": "error: null, retry"
+  },
+  {
+   "id": "C-10",
+   "name": "統合の今の依頼を Task ID ではなく最初の統合依頼にする",
+   "find": "if (kind === 'SYN') return c.synthesisReq ? (c.synthesisReq.task || synTaskId(c)) : null;",
+   "replace": "if (kind === 'SYN') return c.synthesisReq ? (c.id + '-SYN') : null;"
+  }
+ ]
+}

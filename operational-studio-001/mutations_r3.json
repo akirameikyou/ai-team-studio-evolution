@@ -1,0 +1,143 @@
+{
+ "about": "parse_v2.js に意図的な不具合を1つずつ入れ、固定した試験（cases_v2r3.json）が不合格を出すか確かめる一覧。find は parse_v2.js 内にちょうど1回現れる文字列、replace はその置き換え。mutation_runner_r3.html で再実行できる。 r3 で M-21・M-22（conflicts の余分）を追加。",
+ "mutants": [
+  {
+   "id": "M-01",
+   "name": "D1 の基準を2に",
+   "find": "const MIN_DISTINCT_KEYS = 3;",
+   "replace": "const MIN_DISTINCT_KEYS = 2;"
+  },
+  {
+   "id": "M-02",
+   "name": "複数の有効候補で最後を採用",
+   "find": "if (valid.length >= 2) return failed('AMBIGUOUS_MULTIPLE_BLOCKS');",
+   "replace": "if (valid.length >= 2) valid.splice(0, valid.length - 1);"
+  },
+  {
+   "id": "M-03",
+   "name": "見本判定 every→some",
+   "find": "nonIdentity.every(k => c.placeholder[k])",
+   "replace": "nonIdentity.some(k => c.placeholder[k])"
+  },
+  {
+   "id": "M-04",
+   "name": "閉じなし＋後続タグを無視",
+   "find": "if (!sel.closed && sel.followedByTag) return failed('UNCLOSED_FOLLOWED_BY_TAG');",
+   "replace": ""
+  },
+  {
+   "id": "M-05",
+   "name": "行頭の重複検出を外す",
+   "find": "if (!taken.has(keyPos(mk)) && hits.some(x => x.k === mk.k)) markers.push(mk);",
+   "replace": ""
+  },
+  {
+   "id": "M-06",
+   "name": "値の食い違い判定を外す",
+   "find": "if (dups[k].some(v => v !== fields[k])) conflicts.push(k);",
+   "replace": ""
+  },
+  {
+   "id": "M-07",
+   "name": "分類未確定の警告を外す",
+   "find": "if (labels.length) warnings.push('CLASSIFICATION_UNCERTAIN');",
+   "replace": ""
+  },
+  {
+   "id": "M-08",
+   "name": "eligible が確認を無視",
+   "find": "return requiredConfirmations(r, opts).every(x => done.has(x));",
+   "replace": "return true;"
+  },
+  {
+   "id": "M-09",
+   "name": "SOURCE_ACCESS を部分一致に",
+   "find": "return SOURCE_ACCESS_TEMPLATE.test(v);",
+   "replace": "return v.includes('=DIRECT|');"
+  },
+  {
+   "id": "M-10",
+   "name": "閉じタグの位置条件を外す",
+   "find": "const closed = !!c && (nextOpen < 0 || c.index < nextOpen);",
+   "replace": "const closed = !!c;"
+  },
+  {
+   "id": "M-11",
+   "name": "D10 を外す（識別キーだけを有効に）",
+   "find": "c.verdict = nonIdentity.length === 0 ? 'NO_CONTENT' : ",
+   "replace": "c.verdict = nonIdentity.length === 0 ? 'VALID' : "
+  },
+  {
+   "id": "M-12",
+   "name": "重複で後の値を採用（X-2 違反）",
+   "find": "if (!(x.k in fields)) fields[x.k] = valueOf(i);\n      else (dups[x.k] = dups[x.k] || []).push(valueOf(i));",
+   "replace": "if (!(x.k in fields) || !x.dup) fields[x.k] = valueOf(i);\n      else (dups[x.k] = dups[x.k] || []).push(valueOf(i));"
+  },
+  {
+   "id": "M-13",
+   "name": "候補の closed を常に true と報告",
+   "find": "closed: c.closed, keySet",
+   "replace": "closed: true, keySet"
+  },
+  {
+   "id": "M-14",
+   "name": "余分な候補を報告",
+   "find": "const diag = cands => cands.map(",
+   "replace": "const diag = cands => cands.concat(cands.slice(0, 1)).map("
+  },
+  {
+   "id": "M-15",
+   "name": "keySet を1つ欠けて報告",
+   "find": "keySet: c.keySet, placeholder",
+   "replace": "keySet: (c.keySet || []).slice(1), placeholder"
+  },
+  {
+   "id": "M-16",
+   "name": "括弧の判定を外す",
+   "find": "else if (isParenthesized(fields[k])) c.placeholder[k] = 'PARENTHESIZED';",
+   "replace": ""
+  },
+  {
+   "id": "M-17",
+   "name": "start を1ずらす",
+   "find": "id: c.id, start: c.start,",
+   "replace": "id: c.id, start: c.start + 1,"
+  },
+  {
+   "id": "M-18",
+   "name": "重複検出を行内にも広げる（D11=A 違反）",
+   "find": "const lineRe = new RegExp('(?:^|\\\\n)[ \\\\t]*(' + keys.join('|') + ')\\\\s*:', 'gi');",
+   "replace": "const lineRe = new RegExp('(?:^|\\\\s)(' + keys.join('|') + ')\\\\s*:', 'gi');"
+  },
+  {
+   "id": "M-19",
+   "name": "ruleVersion を変える",
+   "find": "const RULE_VERSION = 'v2';",
+   "replace": "const RULE_VERSION = 'v2x';"
+  },
+  {
+   "id": "M-20",
+   "name": "NO_CONTENT_FIELDS を NO_STRUCTURAL に",
+   "find": "has('NO_CONTENT') ? 'NO_CONTENT_FIELDS' : ",
+   "replace": "has('NO_CONTENT') ? 'NO_STRUCTURAL_CANDIDATE' : "
+  },
+  {
+   "id": "M-21",
+   "name": "余分な conflict を常に1つ返す",
+   "find": "const warnings = [], conflicts = [];",
+   "replace": "const warnings = [], conflicts = ['CASE'];"
+  },
+  {
+   "id": "M-22",
+   "name": "同じ値の重複も conflict にする",
+   "find": "if (dups[k].some(v => v !== fields[k])) conflicts.push(k);",
+   "replace": "conflicts.push(k);"
+  },
+  {
+   "id": "M-23",
+   "name": "統合ブロックだけ余分な conflict（r2 の判定では見逃す型）",
+   "find": "const warnings = [], conflicts = [];",
+   "replace": "const warnings = [], conflicts = tag === 'STUDIO_SYNTHESIS' ? ['COMMON'] : [];"
+  }
+ ]
+}

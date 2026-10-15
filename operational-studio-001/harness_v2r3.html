@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ja">
+<head><meta charset="utf-8"><title>parse_v2 harness r3 (stage 1a-r3)</title></head>
+<body>
+<h1>parse_v2 harness r3（段階1a-r3）</h1>
+<p>parse_v2.js を cases_v2r3.json（候補の全項目・位置試験・版情報を含む）と照合する。連絡フォルダをルートにした localhost で開く。外部通信なし。</p>
+<pre id="out">running…</pre>
+<script src="parse_v2.js"></script>
+<script src="harness_common_r3.js"></script>
+<script>
+'use strict';
+const text = async p => { const r = await fetch(p, { cache: 'no-store' }); if (!r.ok) throw new Error(p + ' HTTP ' + r.status); return r.text(); };
+const sha256 = async s => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)))].map(x => x.toString(16).padStart(2, '0')).join('');
+(async () => {
+  const out = { startedAt: new Date().toISOString(), userAgent: navigator.userAgent };
+  try {
+    const [casesText, v2Text, commonText] = await Promise.all([text('cases_v2r3.json'), text('parse_v2.js'), text('harness_common_r3.js')]);
+    out.files = { cases_v2r3: await sha256(casesText), parse_v2: await sha256(v2Text), harness_common_r3: await sha256(commonText) };
+    out.result = HarnessCommon.runSuite(ParseV2, JSON.parse(casesText));
+  } catch (e) { out.error = String(e); }
+  out.finishedAt = new Date().toISOString();
+  window.__R2__ = out;
+  document.getElementById('out').textContent = JSON.stringify(out, null, 2);
+})();
+</script>
+</body>
+</html>

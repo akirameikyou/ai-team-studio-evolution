@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ja">
+<head><meta charset="utf-8"><title>parse_v2 mutation runner</title></head>
+<body>
+<h1>parse_v2 不具合注入（mutations_r3.json）</h1>
+<p>parse_v2.js の文字列に mutations_r3.json の置き換えを1つずつ加え、harness_common_r3.js の runSuite で cases_v2r3.json を照合する。
+不合格が1件以上なら KILLED（試験が不具合を検出した）、0件なら SURVIVED。find が1回だけ現れない場合は PATTERN_ERROR。</p>
+<pre id="out">running…</pre>
+<script src="harness_common_r3.js"></script>
+<script>
+'use strict';
+const text = async p => { const r = await fetch(p, { cache: 'no-store' }); if (!r.ok) throw new Error(p + ' HTTP ' + r.status); return r.text(); };
+const sha256 = async s => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)))].map(x => x.toString(16).padStart(2, '0')).join('');
+const load = src => { const g = {}; new Function('globalThis', 'module', src)(g, undefined); return g.ParseV2; };
+(async () => {
+  const out = { startedAt: new Date().toISOString() };
+  try {
+    const [src, casesText, mutText] = await Promise.all([text('parse_v2.js'), text('cases_v2r3.json'), text('mutations_r3.json')]);
+    out.files = { parse_v2: await sha256(src), cases_v2r3: await sha256(casesText), mutations: await sha256(mutText) };
+    const spec = JSON.parse(casesText);
+    const baseline = HarnessCommon.runSuite(load(src), spec);
+    out.baseline = { total: baseline.total, pass: baseline.pass };
+    out.mutants = JSON.parse(mutText).mutants.map(m => {
+      const n = src.split(m.find).length - 1;
+      if (n !== 1) return { id: m.id, name: m.name, result: 'PATTERN_ERROR', occurrences: n };
+      let r; try { r = HarnessCommon.runSuite(load(src.replace(m.find, () => m.replace)), spec); } catch (e) { return { id: m.id, name: m.name, result: 'KILLED', note: 'load error ' + e }; }
+      return { id: m.id, name: m.name, result: r.fails.length ? 'KILLED' : 'SURVIVED', failing: r.fails.map(f => f.id) };
+    });
+    out.summary = { killed: out.mutants.filter(m => m.result === 'KILLED').length, survived: out.mutants.filter(m => m.result === 'SURVIVED').length,
+                    patternErrors: out.mutants.filter(m => m.result === 'PATTERN_ERROR').length, total: out.mutants.length };
+  } catch (e) { out.error = String(e); }
+  out.finishedAt = new Date().toISOString();
+  window.__MUT__ = out;
+  document.getElementById('out').textContent = JSON.stringify(out, null, 2);
+})();
+</script>
+</body>
+</html>
