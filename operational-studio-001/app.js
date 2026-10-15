@@ -185,14 +185,27 @@ const oneLine = s => String(s || '').replace(/\s+/g, ' ').trim().slice(0, 200);
 // ---------- parsing (tolerant: full-width marks, joined lines, lowercase) ----------
 function parseBlock(text, tag, keys) {
   const t = String(text || '').replace(/［/g, '[').replace(/］/g, ']').replace(/：/g, ':');
-  const m = t.match(new RegExp('\\[' + tag + '\\]([\\s\\S]*?)(\\[\\/' + tag + '\\]|$)', 'i'));
-  if (!m) return null;
-  // Keys normally start a line. Only when an AI joined the lines (few line-start keys) fall back to splitting inside lines,
-  // so a body that merely mentions "OBSERVATION:" is not cut. The first occurrence of a key wins.
-  const scan = lead => { const re = new RegExp(lead + '(' + keys.join('|') + ')\\s*:', 'gi'), hits = []; let h;
-    while ((h = re.exec(m[1]))) hits.push({ k: h[1].toUpperCase(), s: h.index + h[0].length, a: h.index }); return hits; };
-  let hits = scan('(?:^|\\n)[ \\t]*'); if (hits.length < 3) hits = scan('(?:^|\\s)');
-  const f = {}; hits.forEach((x, i) => { if (!(x.k in f)) f[x.k] = m[1].slice(x.s, i + 1 < hits.length ? hits[i + 1].a : m[1].length).trim(); });
+  // Use the last block: AIs often mention "[STUDIO_RESULT]" in prose or quote the template before their real answer.
+  const lower = t.toLowerCase(), open = '[' + tag.toLowerCase() + ']', close = '[/' + tag.toLowerCase() + ']';
+  const end = lower.lastIndexOf(close), start = lower.lastIndexOf(open, end < 0 ? lower.length : end);
+  if (start < 0) return null;
+  const body = t.slice(start + open.length, end > start ? end : t.length);
+  // Keys are expected in template order, but AIs join or re-wrap lines freely. Walk the keys in order and take each one's
+  // first occurrence after the previous key, preferring a line-start occurrence; text between keys (even "OBSERVATION:"
+  // inside a value) stays in the value. Keys an AI wrote out of order are then picked up from line starts.
+  const find = (k, from, lineOnly) => { const re = new RegExp((lineOnly ? '(?:^|\\n)[ \\t]*' : '(?:^|\\s)') + '(' + k + ')\\s*:', 'gi'); re.lastIndex = from;
+    const h = re.exec(body); return h ? { k, a: h.index, s: h.index + h[0].length } : null; };
+  const hits = []; let pos = 0;
+  const anyKey = new RegExp('(?:^|\\s)(' + keys.join('|') + ')\\s*:', 'i');
+  for (const k of keys) {
+    const inl = find(k, pos, false), line = find(k, pos, true);
+    // A later line-start occurrence wins over an inline one only if no other key sits between them (then the inline one was a mention).
+    const pick = line && inl && line.a > inl.a && !anyKey.test(body.slice(inl.s, line.a)) ? line : inl;
+    if (pick) { hits.push(pick); pos = pick.s; }
+  }
+  for (const k of keys) if (!hits.some(x => x.k === k)) { const h = find(k, 0, true); if (h && !hits.some(x => h.a >= x.a && h.a < x.s)) hits.push(h); }
+  hits.sort((x, y) => x.a - y.a);
+  const f = {}; hits.forEach((x, i) => { if (!(x.k in f)) f[x.k] = body.slice(x.s, i + 1 < hits.length ? hits[i + 1].a : body.length).trim(); });
   return { fields: f, missing: keys.filter(k => !(k in f)) };
 }
 function parseAccess(v) {
@@ -287,8 +300,11 @@ function nextStep(c) {
   const { n, sent, got } = stageState(c); const acts = [];
   const pend = c.observers.filter(x => !c.tasks[x].sentAt);
   if (pend.length) {
-    for (const x of pend) acts.push([obsSetting(x).connector === 'manual' ? `${x} への依頼をコピー` : `${x} へ送る`, () => send(c, x, 'observe'), true]);
-    return [`各AIへ観測を依頼します（${sent}/${n} 送付済み）。手動のAIは、コピーした依頼文をそのAIに貼ってください。`, acts];
+    const unv = c.sources.filter(s => s.kind === 'ファイル' && !s.verified);
+    if (unv.length) acts.push(['手元のファイルを確かめる', () => $('srcFile').click(), true]);
+    for (const x of pend) acts.push([obsSetting(x).connector === 'manual' ? `${x} への依頼をコピー` : `${x} へ送る`, () => send(c, x, 'observe'), !unv.length]);
+    const pre = unv.length ? `資料 ${unv.map(s => s.id).join('・')}（手元のファイル）はまだ確かめていません。先に「手元のファイルを確かめる」で選ぶと、確認済みとして依頼文に載ります。` : '';
+    return [pre + `各AIへ観測を依頼します（${sent}/${n} 送付済み）。手動のAIは、コピーした依頼文をそのAIに貼ってください。`, acts];
   }
   // Once synthesis has been requested with partial results, stop showing the observation wait (late answers can still be pasted).
   if (got < n && !c.synthesisReq) {
@@ -413,13 +429,24 @@ function bind() {
   $('pasteBox').addEventListener('drop', async e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) doPaste(await f.text(), 'ファイル'); });
   $('srcAddBtn').onclick = () => { const c = cur(), v = $('srcAdd').value.trim(); if (!v) return;
     const found = extractSources(v); const list = found.length ? found : [{ id: '', kind: 'テキスト', ref: v, claimedHash: null, verified: null, access: {} }];
-    for (const s of list) { s.id = 'S' + (c.sources.length + 1); c.sources.push(s); log(c, `資料 ${s.id} を追加`); }
+    // Skip anything already registered, so the same file or URL never becomes two SOURCEs.
+    const known = new Set(c.sources.map(x => x.ref.trim().toLowerCase())), skipped = [];
+    for (const s of list) { if (known.has(s.ref.trim().toLowerCase())) { skipped.push(s.ref); continue; } known.add(s.ref.trim().toLowerCase());
+      s.id = 'S' + (c.sources.length + 1); c.sources.push(s); log(c, `資料 ${s.id} を追加`); }
+    if (skipped.length) tell('登録済みのため追加しませんでした：\n' + skipped.join('\n'));
     bump(c, 'typed'); $('srcAdd').value = ''; save(); render(); verifySources(c); };
-  $('srcFile').onchange = async e => { const c = cur(), f = e.target.files[0]; if (!f) return;
-    const h = await sha256Hex(await f.arrayBuffer());
-    let s = c.sources.find(x => x.ref.endsWith(f.name)); if (!s) { s = { id: 'S' + (c.sources.length + 1), kind: 'ファイル', ref: f.name, claimedHash: null, verified: null, access: {} }; c.sources.push(s); }
-    if (h) { s.verified = { sha256: h, size: f.size, by: 'Studio（手元のファイル）', at: now() }; log(c, `${s.id} を手元のファイルで確認`); } else s.verifyNote = 'このブラウザでは計算できません（http://localhost で開いてください）';
-    bump(c, 'drop'); e.target.value = ''; save(); render(); };
+  $('srcFile').onchange = async e => { const c = cur(), files = [...e.target.files]; e.target.value = ''; if (!files.length) return;
+    for (const f of files) {
+      const h = await sha256Hex(await f.arrayBuffer());
+      let hit = c.sources.filter(x => x.ref.endsWith(f.name));
+      if (!hit.length && h) hit = c.sources.filter(x => x.verified && x.verified.sha256 === h);
+      if (!hit.length) { const s = { id: 'S' + (c.sources.length + 1), kind: 'ファイル', ref: f.name, claimedHash: null, verified: null, access: {} }; c.sources.push(s); hit = [s]; }
+      for (const s of hit) {
+        if (h) { s.verified = { sha256: h, size: f.size, by: 'Studio（手元のファイル）', at: now() }; delete s.verifyNote; log(c, `${s.id} を手元のファイルで確認`); }
+        else s.verifyNote = 'このブラウザでは計算できません（http://localhost で開いてください）';
+      }
+    }
+    bump(c, 'drop'); save(); render(); };
   $('exportBtn').onclick = () => { const c = cur(); download(c.id + '.json', JSON.stringify({ format: 'ats-operational-case', version: 1, exportedAt: now(), case: c }, null, 2), 'application/json'); };
   $('mdBtn').onclick = () => { const c = cur(); download(c.id + '.md', caseMd(c), 'text/markdown'); };
   $('importFile').onchange = async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return;
