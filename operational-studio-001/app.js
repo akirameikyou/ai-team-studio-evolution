@@ -51,8 +51,8 @@ function save() {
   if (saveBlocked) return false;
   const prevRev = store.rev || 0;
   store.rev = prevRev + 1;    // 2-C: a revision number for the record copies
-  try { localStorage.setItem(KEY, JSON.stringify(store)); scheduleBackup(); return true; }
-  catch (e) { store.rev = prevRev; flash('保存に失敗しました（' + e.name + '）。記録をJSONで保存してください。', true); return false; }
+  try { localStorage.setItem(KEY, JSON.stringify(store)); backup.saveFailed = false; scheduleBackup(); return true; }
+  catch (e) { store.rev = prevRev; backup.saveFailed = true; flash('保存に失敗しました（' + e.name + '）。記録をJSONで保存してください。', true); return false; }
 }
 
 // ---------- 2-C: copies of the record in the relay folder ----------
@@ -61,14 +61,18 @@ function save() {
 // it queues one more. Nothing is sent while saving is blocked. Failures are shown, never hidden.
 // Copies run strictly one after another (a promise chain); runBackup() resolves with the result of *its own* copy,
 // so a caller that must know whether the current record was kept (restore) waits for exactly that copy.
+// At most one copy waits behind the one in flight: a copy reads localStorage when it starts, so a second waiting copy
+// would only repeat it (Codex review of b061274). Each request gives up after timeoutMs, so the chain cannot hang.
 const BACKUP_DELAY = 3000;
-const backup = { timer: null, chain: Promise.resolve(), last: null, error: null, count: null, totalBytes: null };
+const backup = { timer: null, chain: Promise.resolve(), queued: null, timeoutMs: 20000, last: null, error: null, count: null, totalBytes: null, saveFailed: false };
 function scheduleBackup() {
   if (!store.settings.proxyUrl) return renderBackupNote();
   clearTimeout(backup.timer); backup.timer = setTimeout(runBackup, BACKUP_DELAY);
 }
 function runBackup() {
-  const p = backup.chain.then(copyOnce);
+  if (backup.queued) return backup.queued;
+  const p = backup.chain.then(() => { backup.queued = null; return copyOnce(); });
+  backup.queued = p;
   backup.chain = p.catch(() => {});
   return p;
 }
@@ -78,14 +82,17 @@ async function copyOnce() {
   try { text = localStorage.getItem(KEY); } catch (e) { backup.error = { at: now(), why: '保存領域を読めません' }; renderBackupNote(); return { ok: false, why: backup.error.why }; }
   if (text == null) { renderBackupNote(); return { ok: false, skipped: true, why: 'まだ保存された記録がありません' }; }
   let rev = 0; try { rev = JSON.parse(text).rev || 0; } catch (_) { }      // the revision of the text being sent, not of a later save
+  const ac = new AbortController(), timer = setTimeout(() => ac.abort(), backup.timeoutMs);
   try {
-    const r = await fetch(store.settings.proxyUrl.replace(/\/$/, '') + '/snapshot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rev, store: text }) });
+    const r = await fetch(store.settings.proxyUrl.replace(/\/$/, '') + '/snapshot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rev, store: text }), signal: ac.signal })
+      .catch(e => { throw ac.signal.aborted ? new Error(`中継が ${backup.timeoutMs / 1000} 秒以内に応答しません`) : e; });
     const j = await r.json();
     if (!r.ok || !j.saved) throw new Error(j.error || 'HTTP ' + r.status);
     backup.last = { at: now(), name: j.saved, rev }; backup.error = null;
     if (typeof j.count === 'number') { backup.count = j.count; backup.totalBytes = j.totalBytes; }
     renderBackupNote(); return { ok: true, name: j.saved };
   } catch (e) { backup.error = { at: now(), why: e.message }; renderBackupNote(); return { ok: false, why: e.message }; }
+  finally { clearTimeout(timer); }
 }
 function renderBackupNote() {
   const el = $('backupNote'); if (!el) return;
@@ -106,7 +113,9 @@ async function restoreFromCopy() {
   const p = StudioText.parseStoreSnapshot(text);
   if (p.error) return tell('この写しは使えません：' + p.error);
   const nowCount = Object.keys(store.cases).length, newCount = Object.keys(p.store.cases).length;
-  if (!(await ask(`今の記録（Case ${nowCount}件）を、写し ${name}（Case ${newCount}件）で置き換えます。\n今の記録は、先に写しとして保存します。`, '置き換える'))) return;
+  // Copies are made from what was saved. After a failed save the screen holds more than that, and it would be lost.
+  const unsaved = backup.saveFailed ? '\n\n注意：最後の保存に失敗しています。画面に出ている今の内容のうち、保存できなかった分は写しに入りません。必要なら先に「記録をJSONで保存」で書き出してください。' : '';
+  if (!(await ask(`今の記録（Case ${nowCount}件）を、写し ${name}（Case ${newCount}件）で置き換えます。\n今の記録は、先に写しとして保存します。${unsaved}`, '置き換える'))) return;
   // Keep the current record as one more copy first, whatever it holds (settings count too, even with 0 Cases). The
   // copy waits for any copy already in flight and reports its own result.
   if (!saveBlocked) {

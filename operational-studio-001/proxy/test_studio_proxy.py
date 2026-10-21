@@ -244,6 +244,16 @@ class RelayFileTests(unittest.TestCase):
             self.assertEqual(self.get_status('/snapshot', name=a)[0], 404)
             self.assertEqual(self.get_status('/snapshot', name=b)[0], 200)
 
+    def test_a_snapshot_folder_that_is_a_link_is_not_used(self):
+        a = self.snap({'rev': 1, 'store': self.STORE})['saved']
+        folder = str(self.ex / '_snapshots')
+        real = Path.is_symlink
+        with mock.patch.object(Path, 'is_symlink', lambda p: str(p) == folder or real(p)):
+            self.assertEqual(self.get_status('/snapshots')[1]['snapshots'], [])
+            self.assertEqual(self.get_status('/snapshot', name=a)[0], 404)
+            self.assertEqual(self.snap({'rev': 2, 'store': self.STORE})['status'], 409)
+        self.assertEqual(len(list((self.ex / '_snapshots').iterdir())), 1)
+
     def test_snapshot_names_outside_the_pattern_are_not_read(self):
         (self.ex / 'secret.json').write_text('{}', encoding='utf-8')
         for name in ('../secret.json', 'secret.json', 'ats-store-x.json', ''):

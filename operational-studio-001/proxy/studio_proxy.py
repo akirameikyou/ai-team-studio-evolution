@@ -37,7 +37,7 @@ def snapshot_files():
     """Regular snapshot files directly in the snapshot folder, newest name first. Symbolic links (and anything that
     resolves outside the folder) are never listed or read."""
     d = snapshots_dir()
-    if not d.exists():
+    if not d.exists() or d.is_symlink():      # a snapshot folder that is itself a link is not used at all
         return []
     root = d.resolve()
     out = [p for p in d.glob('ats-store-*.json')
@@ -284,6 +284,8 @@ class Handler(BaseHTTPRequestHandler):
             problem = snapshot_problem(text)
             if problem:
                 return self.reply(400, {'error': problem})
+            if snapshots_dir().is_symlink():
+                return self.reply(409, {'error': 'the snapshot folder is a symbolic link; copies are not written there'})
             snapshots_dir().mkdir(parents=True, exist_ok=True)
             with _SNAPSHOT_NAME_LOCK:
                 stamp = time.strftime('%Y%m%dT%H%M%S', time.gmtime()) + f'{int(time.time() * 1000) % 1000:03d}Z'
