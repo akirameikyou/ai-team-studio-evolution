@@ -157,6 +157,9 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if u.path == '/health':
                 return self.reply(200, {'ok': True, 'providers': providers(), 'exchange': str(EXCHANGE)})
+            if u.path == '/case-exists':
+                # 2-B: lets the Studio avoid a Case ID whose folder is already here (read-only; nothing is created).
+                return self.reply(200, {'exists': (EXCHANGE / safe(q['case'])).exists()})
             if u.path == '/result':
                 p = EXCHANGE / safe(q['case']) / safe(q['task']) / f"from-{safe(q['to'])}.md"
                 if not p.exists():

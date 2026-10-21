@@ -111,11 +111,26 @@
       || (!!s.verified && !!x.verified && x.verified.sha256 === s.verified.sha256));
   }
 
+  // 2-B: a Case ID that does not repeat after the browser's storage is lost. CASE-YYYYMMDD-NNN-xxxxxx: the date and a
+  // counter for people, and a random suffix (lowercase letters and digits, safe as a Windows folder name) so that a
+  // counter that restarts at 001 cannot reuse an earlier Case's relay folder (10/21: an old from-Codex.md would have
+  // been taken as the new Case's result). `suffix` is supplied by the caller (crypto.getRandomValues in the app).
+  function caseIdFor(date, existingIds, suffix) {
+    const d = date instanceof Date ? date : new Date(date);
+    const ymd = d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+    const sfx = String(suffix || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (sfx.length < 6) return null;
+    // Old IDs (CASE-YYYYMMDD-NNN) and new ones both count by their date-and-counter part.
+    const known = new Set([...(existingIds || [])].map(x => (String(x).match(/^CASE-\d{8}-\d{3}/) || [''])[0]));
+    let n = 1; while (known.has(`CASE-${ymd}-${String(n).padStart(3, '0')}`)) n++;
+    return `CASE-${ymd}-${String(n).padStart(3, '0')}-${sfx.slice(0, 6)}`;
+  }
+
   // A Markdown code fence longer than the longest run of backticks in the text (at least three).
   function fenceFor(text) {
     const runs = String(text == null ? '' : text).match(/`+/g) || [];
     return '`'.repeat(Math.max(3, ...runs.map(r => r.length + 1)));
   }
 
-  global.StudioText = { extractSources, splitDifferences, LAYERS, relaySafeName, relayPaths, agentInstruction, TEXT_KIND, TEXT_MAX, textSource, sourceBodies, isDuplicateText, fenceFor };
+  global.StudioText = { extractSources, splitDifferences, LAYERS, relaySafeName, relayPaths, agentInstruction, TEXT_KIND, TEXT_MAX, textSource, sourceBodies, isDuplicateText, fenceFor, caseIdFor };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

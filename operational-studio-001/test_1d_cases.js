@@ -201,6 +201,17 @@ test('T-05 絶対パスは全角の句読点・括弧で止まる（日本語の
   check(r3.length === 2 && r3[0].ref === p1 && r3[1].ref === p2, '」と、で区切られた2件 ' + refs(r3));
 });
 
+test('T-07 Case 番号（日付・連番・乱数）', () => {
+  const d = new Date(2026, 9, 21, 9, 0, 0);
+  const a = T.caseIdFor(d, [], 'Ab12CD');
+  check(a === 'CASE-20261021-001-ab12cd', '日付・001・小文字の乱数 ' + a);
+  check(T.caseIdFor(d, ['CASE-20261021-001', 'CASE-20261021-002-x1y2z3'], 'qwerty') === 'CASE-20261021-003-qwerty', '旧形式と新形式の両方の連番を避ける');
+  check(T.caseIdFor(d, [], 'a-b') === null, '乱数が6文字に足りなければ作らない');
+  const b = T.caseIdFor(d, [], 'zzzzzz');
+  check(a.slice(0, 18) === b.slice(0, 18) && a !== b, '記録が消えて連番が 001 に戻っても、乱数の部分で別の番号になる');
+  check(T.relaySafeName(a) === a, '中継のフォルダ名としてそのまま使える');
+});
+
 test('T-06 結果ファイルは一時ファイルに書いてから名前を変えるよう頼む', () => {
   const p = T.relayPaths('C:/x/exchange', 'C1', 'C1-OBS-Codex', 'Codex');
   const s = T.agentInstruction(p);

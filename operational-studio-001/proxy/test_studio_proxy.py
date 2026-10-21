@@ -144,6 +144,17 @@ class RelayFileTests(unittest.TestCase):
         self.assertIn(final, packets)
         self.assertTrue(self.no_temp_files())
 
+    def get(self, path, **q):
+        with urllib.request.urlopen(f'{self.base}{path}?{urllib.parse.urlencode(q)}', timeout=10) as r:
+            return json.loads(r.read().decode('utf-8'))
+
+    def test_case_exists_reports_folders_without_creating_any(self):
+        self.assertEqual(self.get('/case-exists', case='CASE-20261021-001-abc123'), {'exists': False})
+        self.assertEqual(list(self.ex.iterdir()), [])
+        self.post({'case': 'CASE-20261021-001-abc123', 'task': 'T', 'to': 'GPT', 'route': 'agent', 'packet': 'p'})
+        self.assertEqual(self.get('/case-exists', case='CASE-20261021-001-abc123'), {'exists': True})
+        self.assertEqual(self.get('/case-exists', case='CASE-20261021-001-zzz999'), {'exists': False})
+
     def test_unsafe_path_parts_are_refused_and_nothing_is_written(self):
         r = self.post({'case': '..', 'task': 'T', 'to': 'GPT', 'route': 'agent', 'packet': 'p'})
         self.assertEqual(r['status'], 500)

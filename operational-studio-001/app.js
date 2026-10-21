@@ -59,22 +59,39 @@ function log(c, t) { c.log.push({ at: now(), t }); }
 function bump(c, k, n = 1) { c.metrics[k] = (c.metrics[k] || 0) + n; }
 
 // ---------- case creation ----------
-function newCaseId() {
-  const d = new Date(), ymd = d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
-  let n = 1; while (store.cases[`CASE-${ymd}-${String(n).padStart(3, '0')}`]) n++;
-  return `CASE-${ymd}-${String(n).padStart(3, '0')}`;
+// 2-B: date + counter + random suffix (StudioText.caseIdFor). When a relay is set, an ID whose folder already exists
+// there is not used. If the relay cannot be asked, the random suffix alone keeps the ID apart (logged by the caller).
+function randomSuffix() {
+  const b = new Uint8Array(6); crypto.getRandomValues(b);
+  return [...b].map(x => '0123456789abcdefghijklmnopqrstuvwxyz'[x % 36]).join('');
+}
+async function newCaseId() {
+  for (let i = 0; i < 5; i++) {
+    const id = StudioText.caseIdFor(new Date(), Object.keys(store.cases), randomSuffix());
+    if (store.cases[id]) continue;
+    if (!store.settings.proxyUrl) return { id, checked: false };
+    try {
+      const j = await (await fetch(store.settings.proxyUrl.replace(/\/$/, '') + '/case-exists?' + new URLSearchParams({ case: id }))).json();
+      if (j.exists === false) return { id, checked: true };
+      if (j.exists !== true) return { id, checked: false };
+    } catch (e) { return { id, checked: false }; }
+  }
+  return { id: null };
 }
 // 2-1A: the premise is added before anything is sent, because relay-connected AIs get their task at creation.
 async function createCase(question, observerNames, premise) {
   const pre = premise && premise.text.trim() ? await makeTextSource('S1', premise.title, premise.text) : null;
   if (pre && pre.error) return tell(pre.error);
+  const nid = await newCaseId();
+  if (!nid.id) return tell('重ならない Case 番号を作れませんでした。もう一度「始める」を押してください。');
   const c = {
-    id: newCaseId(), question: question.trim(), createdAt: now(), sources: StudioText.extractSources(question, { bareNames: false }),   // 1d-1: file names in the question are not SOURCEs
+    id: nid.id, question: question.trim(), createdAt: now(), sources: StudioText.extractSources(question, { bareNames: false }),   // 1d-1: file names in the question are not SOURCEs
     observers: observerNames, tasks: {}, synthesis: null, gate: null, gateHistory: [], next: null,
     metrics: { typed: 1 }, log: []
   };
   if (pre) { c.sources.unshift(pre); c.sources.forEach((s, i) => { s.id = 'S' + (i + 1); }); }
   log(c, `問いを受け取り、CASEを作成（資料 ${c.sources.length}件${pre ? '・うち前提資料の本文 1件' : '・本文から取り出し'}）`);
+  if (store.settings.proxyUrl && !nid.checked) log(c, 'Case 番号が中継のフォルダと重ならないかは確かめられませんでした（乱数の部分で区別しています）');
   for (const name of observerNames) c.tasks[name] = { taskId: c.id + '-OBS-' + name.replace(/\W+/g, ''), sentAt: null, sendStatus: null, result: null };
   store.cases[c.id] = c; store.order.unshift(c.id); store.currentId = c.id;
   save(); render();
