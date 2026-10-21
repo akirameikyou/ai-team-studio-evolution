@@ -633,7 +633,7 @@ function bind() {
   $('srcTextBtn').onclick = async () => { const c = cur(), t = $('srcText').value; if (!t.trim()) return;
     const s = await makeTextSource('S' + (c.sources.length + 1), $('srcTextTitle').value, t);
     if (s.error) return tell(s.error);
-    if (s.verified && c.sources.some(x => x.verified && x.verified.sha256 === s.verified.sha256)) return tell('同じ本文がすでに登録されています');
+    if (StudioText.isDuplicateText(c.sources, s)) return tell('同じ本文がすでに登録されています');
     c.sources.push(s); log(c, `資料 ${s.id}（本文「${s.ref}」）を追加`); bump(c, 'paste');
     $('srcText').value = ''; $('srcTextTitle').value = ''; save(); render();
     if (Object.values(c.tasks).some(t => t.sentAt)) tell('送付済みの依頼には入っていません。必要なら「作り直して再送」で新しい依頼文にしてください。'); };
@@ -674,7 +674,9 @@ function download(name, text, type) { const a = document.createElement('a'); a.h
 function caseMd(c) {
   const S = StudioState, L = [`# ${c.id}`, '', '## 問い', c.question, '', '## SOURCE'];
   for (const s of c.sources) L.push(`- ${s.id} ${s.kind} ${s.ref} — ${srcState(s)[0]}${s.verified ? ' sha256 ' + s.verified.sha256 : ''}｜読めたか: ${Object.entries(s.access).map(([n, a]) => n + '=' + a.status).join(', ') || '報告なし'}`);
-  for (const s of c.sources) if (s.kind === StudioText.TEXT_KIND) L.push('', `### ${s.id} 本文「${s.ref}」`, '```text', s.text, '```');
+  // The fence is longer than any run of backticks in the text, so a ``` inside a premise cannot close it early.
+  for (const s of c.sources) if (s.kind === StudioText.TEXT_KIND) { const f = StudioText.fenceFor(s.text);
+    L.push('', `### ${s.id} 本文「${s.ref}」`, f + 'text', s.text, f); }
   L.push('', '## OBSERVE');
   for (const n of c.observers) { const r = c.tasks[n].result;
     L.push(`### ${n}`, r ? `採用中 ${r.at}（${r.via}・${statusLabel(r)}・${S.eligibleRecord(c, 'RESULT', r, n) ? '利用可能' : '利用不可'}・受信 ${S.receivedCount(c, n)} 件）` : '未着', '');

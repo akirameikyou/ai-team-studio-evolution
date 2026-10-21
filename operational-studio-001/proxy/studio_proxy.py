@@ -13,7 +13,7 @@ Binds to 127.0.0.1 only. CORS is limited to localhost and the project's GitHub P
 Run:  python studio_proxy.py            (port 8787)
       python studio_proxy.py --port 9000
 """
-import argparse, hashlib, json, os, re, sys, time, urllib.error, urllib.parse, urllib.request
+import argparse, hashlib, json, os, re, sys, tempfile, threading, time, urllib.error, urllib.parse, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -21,7 +21,7 @@ HERE = Path(__file__).resolve().parent
 EXCHANGE = HERE / 'exchange'
 ALLOWED_ORIGINS = re.compile(r'^(https?://(127\.0\.0\.1|localhost)(:\d+)?|https://akirameikyou\.github\.io)$')
 MAX_FETCH = 50 * 1024 * 1024
-SETTLE_SECONDS = 2  # a reply file changed more recently than this may still be being written by an agent
+SETTLE_SECONDS = 2  # a reply file changed this recently (inclusive) may still be being written by an agent
 
 
 def load_env():
@@ -41,15 +41,43 @@ def safe(part):
     return s
 
 
+_WRITE_LOCKS = {}
+_WRITE_LOCKS_GUARD = threading.Lock()
+REPLACE_ATTEMPTS, REPLACE_WAIT = 5, 0.2  # Windows: replacing a file another process holds open can fail for a moment
+
+
+def _lock_for(path):
+    with _WRITE_LOCKS_GUARD:
+        return _WRITE_LOCKS.setdefault(str(path), threading.Lock())
+
+
 def write_atomic(path, text):
     """Write text as UTF-8 bytes, exactly (no newline translation), and publish it only when complete:
-    the bytes go to a temporary name in the same folder and os.replace() gives it the final name."""
-    tmp = path.with_name('.' + path.name + '.tmp')
-    with open(tmp, 'wb') as f:
-        f.write(text.encode('utf-8'))
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, path)
+    the bytes go to a temporary file with a unique name in the same folder and os.replace() gives it the
+    final name. Writes to the same path are serialised; the last one to finish wins. If the replace keeps
+    failing (PermissionError while a reader holds the file on Windows), the temporary file is removed and
+    the error is raised, so the caller answers 500 and the old file stays as it was."""
+    with _lock_for(path):
+        fd, tmp = tempfile.mkstemp(prefix='.' + path.name + '.', suffix='.tmp', dir=path.parent)
+        try:
+            with os.fdopen(fd, 'wb') as f:
+                f.write(text.encode('utf-8'))
+                f.flush()
+                os.fsync(f.fileno())
+            for attempt in range(REPLACE_ATTEMPTS):
+                try:
+                    os.replace(tmp, path)
+                    return
+                except PermissionError:
+                    if attempt == REPLACE_ATTEMPTS - 1:
+                        raise
+                    time.sleep(REPLACE_WAIT)
+        finally:
+            if os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
 
 
 def providers():
@@ -133,7 +161,9 @@ class Handler(BaseHTTPRequestHandler):
                 p = EXCHANGE / safe(q['case']) / safe(q['task']) / f"from-{safe(q['to'])}.md"
                 if not p.exists():
                     return self.reply(200, {'pending': True})  # 200, not 404: polling is normal and should not log errors
-                if time.time() - p.stat().st_mtime < SETTLE_SECONDS:
+                # A heuristic, not a completion guarantee: agents are asked to publish their reply atomically too
+                # (StudioText.agentInstruction). Files changed within the last SETTLE_SECONDS (inclusive) wait.
+                if time.time() - p.stat().st_mtime <= SETTLE_SECONDS:
                     return self.reply(200, {'pending': True, 'settling': True})  # possibly half-written by an agent
                 # Read with universal newlines: a reply written with CRLF reaches the Studio with LF (by design).
                 return self.reply(200, {'text': p.read_text(encoding='utf-8')})

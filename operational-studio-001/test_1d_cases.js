@@ -172,6 +172,41 @@ test('T-02 依頼文に入れる本文の区切り（2-1A）', () => {
   check(b.some(x => x.startsWith('--- S1「前提」 SHA-256 ' + 'cd'.repeat(32))) && b.includes('--- S1 ここまで ---'), '区切りに ID・名前・ハッシュ');
 });
 
+test('T-03 本文の二重登録（ハッシュがなくても本文で判定）', () => {
+  const a = T.textSource('S1', 'a', '同じ本文', null, 1, 't'), b = T.textSource('S2', 'b', '同じ本文', null, 1, 't');
+  check(T.isDuplicateText([a], b), 'ハッシュがないときも、同じ本文なら二重登録');
+  check(!T.isDuplicateText([a], T.textSource('S2', 'b', '別の本文', null, 1, 't')), '本文が違えば登録できる');
+  const h = 'ef'.repeat(32);
+  check(T.isDuplicateText([T.textSource('S1', 'a', 'x', h, 1, 't')], T.textSource('S2', 'b', 'y', h, 1, 't')), 'ハッシュが同じなら二重登録');
+  check(!T.isDuplicateText([{ id: 'S1', kind: 'URL', ref: '同じ本文', verified: null }], b), '本文以外の資料とは本文で比べない');
+});
+
+test('T-04 Markdown のコードの区切り', () => {
+  const tick = '`';
+  check(T.fenceFor('普通の本文') === tick.repeat(3), 'バッククォートがなければ3つ');
+  check(T.fenceFor('前' + tick.repeat(3) + 'js 後') === tick.repeat(4), '本文に3つ続きがあれば4つ');
+  check(T.fenceFor(tick.repeat(5)) === tick.repeat(6), '最長の続きより1つ長い');
+});
+
+test('T-05 絶対パスは全角の句読点・括弧で止まる（日本語のフォルダ名は残す）', () => {
+  const bs = String.fromCharCode(92);
+  const p1 = ['C:', 'GitHub', 'repo'].join(bs);
+  const r1 = T.extractSources('リポジトリ ' + p1 + '）を、読み取り専用で', Q);
+  check(r1.length === 1 && r1[0].ref === p1, '（ の手前で止まる ' + refs(r1));
+  const p2 = ['C:', 'Users', 'x', 'ユニコ', 'a.md'].join(bs);
+  const r2 = T.extractSources(p2 + '。続き', Q);
+  check(r2.length === 1 && r2[0].ref === p2, '日本語のフォルダ名を含むパスは残し、。の手前で止まる ' + refs(r2));
+  const r3 = T.extractSources('「' + p1 + '」と' + p2 + '、', Q);
+  check(r3.length === 2 && r3[0].ref === p1 && r3[1].ref === p2, '」と、で区切られた2件 ' + refs(r3));
+});
+
+test('T-06 結果ファイルは一時ファイルに書いてから名前を変えるよう頼む', () => {
+  const p = T.relayPaths('C:/x/exchange', 'C1', 'C1-OBS-Codex', 'Codex');
+  const s = T.agentInstruction(p);
+  check(s.includes('.tmp') && s.includes('書き終えてから'), '一時ファイルと名前の変更を依頼文に含む');
+  check(s.includes('このファイルだけ'), '書いてよいのは結果ファイルだけ、の文はそのまま');
+});
+
 return results;
 }
 if (typeof module !== 'undefined') module.exports = { run1d };

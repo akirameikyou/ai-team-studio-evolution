@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ja">
+<head><meta charset="utf-8"><title>stage 2-1 packet tests</title></head>
+<body>
+<h1>段階2-1 依頼文の試験（前提資料の本文）</h1>
+<p>app.js の依頼文づくり（観測・統合・実行タスク）を、試験用の Case で直接呼び、本文の資料が全文そのまま入ることを確かめる。
+画面の部品がないので app.js の起動処理（bind）は途中で止まるが、依頼文の関数は使える。保存（save）は呼ばない。外部通信なし。</p>
+<pre id="out">running…</pre>
+<script>
+// app.js stops in bind() here (no page elements). Its function declarations are defined before that, so they can be tested.
+window.__bootError = null;
+window.onerror = (msg) => { window.__bootError = String(msg); return true; };
+</script>
+<script src="connectors.js"></script>
+<script src="parse_v2.js"></script>
+<script src="studio_state.js"></script>
+<script src="studio_text.js?v=2-1b"></script>
+<script src="app.js?v=2-1b"></script>
+<script>
+'use strict';
+(async () => {
+  const results = []; let cur = null;
+  const check = (cond, msg) => results.push({ test: cur, ok: !!cond, msg });
+  const NL = String.fromCharCode(10);
+  const hex = async s => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)))].map(b => b.toString(16).padStart(2, '0')).join('');
+
+  const body = ['前提の一行目', '', '空行の後の行', '  行頭に空白のある行', '--- S9 ここまで ---（本文中の紛らわしい行）', '最後の行'].join(NL);
+  const src = await makeTextSource('S1', '試験の前提', body);
+  const fields = { OBSERVATION: '観測', EVIDENCE: 'INFERENCE', UNKNOWN: 'なし', CONDITION: '試験', SOURCE_ACCESS: 'S1=READABLE' };
+  const c = {
+    id: 'CASE-TEST-21', question: '試験の問い', createdAt: now(), sources: [src, { id: 'S2', kind: 'URL', ref: 'https://example.com/x', claimedHash: null, verified: null, access: {} }],
+    observers: ['GPT', 'Codex'], tasks: {
+      GPT: { taskId: 'CASE-TEST-21-OBS-GPT', sentAt: now(), sendStatus: null, result: { fields, raw: '原文' } },
+      Codex: { taskId: 'CASE-TEST-21-OBS-Codex', sentAt: now(), sendStatus: null, result: { fields, raw: '原文' } } },
+    synthesis: { fields: { COMMON: '共通', NEXT_TASK: '作業', EXECUTION_NEEDS: '条件', UNKNOWN: '不明', HOLD: '' }, by: 'GPT', at: now(), raw: 'x', missing: [] },
+    gate: { decision: 'APPROVE', at: now(), reason: '理由' }, gateHistory: [], next: null, metrics: {}, log: [], requests: []
+  };
+  const packets = { observe: observePacket(c, 'GPT'), synthesis: synthesisPacket(c, 'GPT'), next: nextPacket(c, 'Codex', 'CASE-TEST-21-NEXT') };
+
+  cur = 'P-00 準備';
+  check(!src.error && src.verified && src.verified.sha256 === await hex(body), '本文の資料ができ、ハッシュは本文の SHA-256');
+  check(src.verified.size === new TextEncoder().encode(body).length, '大きさは UTF-8 のバイト数');
+  check(/bind|null|Cannot/.test(window.__bootError || ''), 'app.js の起動処理は画面の部品がないところで止まった（想定どおり）: ' + window.__bootError);
+
+  for (const [name, p] of Object.entries(packets)) {
+    cur = 'P-01 ' + name + ' の依頼文';
+    check(p.includes(NL + body + NL), '本文が全文そのまま入る（空行・行頭の空白・紛らわしい行を含む）');
+    check(p.includes('- S1｜本文｜試験の前提｜Studio が保存した本文 SHA-256 ' + src.verified.sha256), '資料の一覧に名前とハッシュ');
+    check(p.includes('--- S1「試験の前提」 SHA-256 ' + src.verified.sha256 + ' ---' + NL + body + NL + '--- S1 ここまで ---'), '区切りの中に本文');
+    check(p.includes('https://example.com/x'), 'ほかの資料（URL）も一覧に残る');
+    const start = p.indexOf('--- S1「試験の前提」'), inner = p.slice(p.indexOf(NL, start) + 1, p.lastIndexOf(NL + '--- S1 ここまで ---'));
+    check(await hex(inner) === src.verified.sha256, '依頼文から取り出した本文のハッシュが記録と一致');
+  }
+
+  const pass = results.filter(r => r.ok).length;
+  const out = { total: results.length, pass, fail: results.length - pass, failures: results.filter(r => !r.ok) };
+  window.__T21__ = out;
+  document.getElementById('out').textContent = JSON.stringify(out, null, 2);
+})();
+</script>
+</body>
+</html>

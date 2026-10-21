@@ -15,7 +15,9 @@
     const t = String(text || '');
     // A URL ends at whitespace, < > " ' ( ), or the first non-ASCII character (Japanese text often follows a URL without a space).
     for (const m of t.matchAll(/https?:\/\/[^\s<>"'）()」\u0080-\uffff]+/g)) add(/github(usercontent)?\.com/.test(m[0]) ? 'GitHub' : 'URL', m[0].replace(/[。、.,]+$/, ''));
-    for (const m of t.matchAll(/[A-Za-z]:\\[^\s"'<>|]+/g)) add('ファイル', m[0]);
+    // A path ends at whitespace, " ' < > |, or full-width punctuation that follows it in Japanese text（）「」、。 etc.
+    // (10/21: "C:\GitHub\repo）を、読み取り専用で…" became one SOURCE). Japanese folder names inside a path are kept.
+    for (const m of t.matchAll(/[A-Za-z]:\\[^\s"'<>|\u3000\u3001\u3002\uff08\uff09\u300c\u300d\u300e\u300f\u3010\u3011\uff0c\uff0e\uff1a\uff1b\uff01\uff1f]+/g)) add('ファイル', m[0]);
     if (bareNames) for (const m of t.matchAll(/\b[\w.-]+\.(zip|pdf|md|json|html|csv|txt|docx|xlsx)\b/gi)) if (![...seen].some(r => r.includes(m[0]))) add('ファイル', m[0]);
     const hashes = [...t.matchAll(/\b[0-9a-f]{64}\b/gi)].map(m => m[0].toLowerCase());
     if (hashes.length && out.length) out[0].claimedHash = hashes[0];
@@ -73,6 +75,8 @@
     if (!p) return '';
     return ['AI Team Studio からの依頼です。次の依頼ファイルを読んでください：', p.toFile, '',
       '依頼文の指示に従い、同じフォルダに次の結果ファイルを新しく書いてください（書いてよいのは、このファイルだけです）：', p.fromFile, '',
+      // 2-1 follow-up: the relay's 2-second wait is only a heuristic; an atomic publish by the writer is what prevents half-read replies.
+      '書くときは、まず同じフォルダに一時ファイル（結果ファイルの名前の後ろに .tmp を付けた名前）で全部書き、書き終えてから結果ファイルの名前に変えてください。書きかけの結果ファイルを見せないためです。', '',
       'ほかのファイルは作成・変更・削除しないでください。commit・push もしないでください。',
       '依頼ファイルが無いとき、または依頼文の TASK がフォルダ名と合わないときは、何も書かずに止まって知らせてください。'].join('\n');
   }
@@ -96,5 +100,18 @@
     return out;
   }
 
-  global.StudioText = { extractSources, splitDifferences, LAYERS, relaySafeName, relayPaths, agentInstruction, TEXT_KIND, TEXT_MAX, textSource, sourceBodies };
+  // A text SOURCE already registered: same text, or same SHA-256 when both have one. The text itself is compared as well,
+  // because without Web Crypto there is no hash to compare (Codex review, CASE-20261021-003).
+  function isDuplicateText(sources, s) {
+    return (sources || []).some(x => (x.kind === TEXT_KIND && x.text === s.text)
+      || (!!s.verified && !!x.verified && x.verified.sha256 === s.verified.sha256));
+  }
+
+  // A Markdown code fence longer than the longest run of backticks in the text (at least three).
+  function fenceFor(text) {
+    const runs = String(text == null ? '' : text).match(/`+/g) || [];
+    return '`'.repeat(Math.max(3, ...runs.map(r => r.length + 1)));
+  }
+
+  global.StudioText = { extractSources, splitDifferences, LAYERS, relaySafeName, relayPaths, agentInstruction, TEXT_KIND, TEXT_MAX, textSource, sourceBodies, isDuplicateText, fenceFor };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

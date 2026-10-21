@@ -12,6 +12,7 @@ import threading
 import time
 import unittest
 import urllib.request
+from unittest import mock
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
@@ -93,6 +94,55 @@ class RelayFileTests(unittest.TestCase):
         old = time.time() - sp.SETTLE_SECONDS - 1
         os.utime(f, (old, old))
         self.assertEqual(self.result('C1', 'C1-OBS-GPT', 'GPT'), {'text': '一行目\n二行目\n'})
+
+    def test_result_waits_at_exactly_the_settle_boundary(self):
+        d = self.task_dir()
+        d.mkdir(parents=True)
+        f = d / 'from-GPT.md'
+        f.write_bytes(b'done')
+        mtime = f.stat().st_mtime
+        with mock.patch.object(sp.time, 'time', return_value=mtime + sp.SETTLE_SECONDS):
+            self.assertEqual(self.result('C1', 'C1-OBS-GPT', 'GPT'), {'pending': True, 'settling': True})
+        with mock.patch.object(sp.time, 'time', return_value=mtime + sp.SETTLE_SECONDS + 0.01):
+            self.assertEqual(self.result('C1', 'C1-OBS-GPT', 'GPT'), {'text': 'done'})
+
+    def test_replace_that_keeps_failing_answers_500_keeps_the_old_file_and_leaves_no_temp(self):
+        self.post({'case': 'C1', 'task': 'C1-OBS-GPT', 'to': 'GPT', 'route': 'agent', 'packet': 'old'})
+        with mock.patch.object(sp, 'REPLACE_WAIT', 0), \
+                mock.patch.object(sp.os, 'replace', side_effect=PermissionError('in use')) as rep:
+            r = self.post({'case': 'C1', 'task': 'C1-OBS-GPT', 'to': 'GPT', 'route': 'agent', 'packet': 'new'})
+        self.assertEqual(r['status'], 500)
+        self.assertEqual(rep.call_count, sp.REPLACE_ATTEMPTS)
+        self.assertEqual((self.task_dir() / 'to-GPT.md').read_bytes(), b'old')
+        self.assertTrue(self.no_temp_files())
+
+    def test_replace_that_fails_briefly_is_retried(self):
+        real = os.replace
+        calls = {'n': 0}
+
+        def flaky(src, dst):
+            calls['n'] += 1
+            if calls['n'] <= 2:
+                raise PermissionError('in use')
+            return real(src, dst)
+        with mock.patch.object(sp, 'REPLACE_WAIT', 0), mock.patch.object(sp.os, 'replace', side_effect=flaky):
+            r = self.post({'case': 'C1', 'task': 'C1-OBS-GPT', 'to': 'GPT', 'route': 'agent', 'packet': PACKET})
+        self.assertTrue(r['queued'])
+        self.assertEqual(calls['n'], 3)
+        self.assertEqual((self.task_dir() / 'to-GPT.md').read_bytes(), PACKET.encode('utf-8'))
+        self.assertTrue(self.no_temp_files())
+
+    def test_concurrent_writes_to_one_file_leave_one_complete_version(self):
+        packets = [f'{i:02d}' + 'x' * (2000 + i * 37) for i in range(12)]
+        threads = [threading.Thread(target=self.post, args=({'case': 'C1', 'task': 'C1-OBS-GPT', 'to': 'GPT',
+                                                             'route': 'agent', 'packet': p},)) for p in packets]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        final = (self.task_dir() / 'to-GPT.md').read_bytes().decode('utf-8')
+        self.assertIn(final, packets)
+        self.assertTrue(self.no_temp_files())
 
     def test_unsafe_path_parts_are_refused_and_nothing_is_written(self):
         r = self.post({'case': '..', 'task': 'T', 'to': 'GPT', 'route': 'agent', 'packet': 'p'})
