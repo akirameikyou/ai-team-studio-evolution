@@ -32,6 +32,11 @@
         <li><b>判断する</b><span>まとめが届いたら APPROVE／HOLD／REVISE を選ぶ</span></li>
       </ol>
       <textarea id="qInput" rows="5" placeholder="例：北斎の晩年の活動について調べたい。参考：https://..."></textarea>
+      <details class="opt"><summary>前提資料を付ける（任意）</summary>
+        <p class="hint">すべてのAIの依頼文に、全文がそのまま入ります。中継につないだAIには「始める」と同時に送られるので、ここで入れてください。</p>
+        <input id="premiseTitle" placeholder="資料の名前（例：前提資料）">
+        <textarea id="premiseInput" rows="6" placeholder="前提資料の本文を貼る（仕様・現状・これまでの経緯など）"></textarea>
+      </details>
       <details class="opt"><summary>参加するAIを選ぶ（任意）</summary><div id="obsPick" class="pick"></div></details>
       <button id="startBtn" class="btn primary big">始める</button>
     </section>
@@ -61,6 +66,11 @@
               <button id="srcAddBtn" class="btn">追加</button>
               <label class="btn">ファイルを確かめる<input id="srcFile" type="file" multiple hidden></label>
             </div>
+            <details class="opt"><summary>本文として追加（前提資料など）</summary>
+              <input id="srcTextTitle" placeholder="資料の名前">
+              <textarea id="srcText" rows="5" placeholder="本文を貼る。全文が依頼文に入ります"></textarea>
+              <button id="srcTextBtn" class="btn">本文として追加</button>
+            </details>
           </div>
 
           <div class="card">
@@ -121,7 +131,7 @@
 <script src="connectors.js"></script>
 <script src="parse_v2.js"></script>
 <script src="studio_state.js"></script>
-<script src="studio_text.js"></script>
-<script src="app.js"></script>
+<script src="studio_text.js?v=2-1"></script>
+<script src="app.js?v=2-1"></script>
 </body>
 </html>

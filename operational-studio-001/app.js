@@ -64,13 +64,17 @@ function newCaseId() {
   let n = 1; while (store.cases[`CASE-${ymd}-${String(n).padStart(3, '0')}`]) n++;
   return `CASE-${ymd}-${String(n).padStart(3, '0')}`;
 }
-function createCase(question, observerNames) {
+// 2-1A: the premise is added before anything is sent, because relay-connected AIs get their task at creation.
+async function createCase(question, observerNames, premise) {
+  const pre = premise && premise.text.trim() ? await makeTextSource('S1', premise.title, premise.text) : null;
+  if (pre && pre.error) return tell(pre.error);
   const c = {
     id: newCaseId(), question: question.trim(), createdAt: now(), sources: StudioText.extractSources(question, { bareNames: false }),   // 1d-1: file names in the question are not SOURCEs
     observers: observerNames, tasks: {}, synthesis: null, gate: null, gateHistory: [], next: null,
     metrics: { typed: 1 }, log: []
   };
-  log(c, `問いを受け取り、CASEを作成（資料 ${c.sources.length}件を本文から取り出し）`);
+  if (pre) { c.sources.unshift(pre); c.sources.forEach((s, i) => { s.id = 'S' + (i + 1); }); }
+  log(c, `問いを受け取り、CASEを作成（資料 ${c.sources.length}件${pre ? '・うち前提資料の本文 1件' : '・本文から取り出し'}）`);
   for (const name of observerNames) c.tasks[name] = { taskId: c.id + '-OBS-' + name.replace(/\W+/g, ''), sentAt: null, sendStatus: null, result: null };
   store.cases[c.id] = c; store.order.unshift(c.id); store.currentId = c.id;
   save(); render();
@@ -100,6 +104,10 @@ async function verifySources(c) {
   }
   save(); render();
 }
+async function makeTextSource(id, title, text) {
+  const bytes = new TextEncoder().encode(String(text));
+  return StudioText.textSource(id, title, text, await sha256Hex(bytes), bytes.length, now());
+}
 function srcState(s) {
   if (s.verified && s.claimedHash) return s.verified.sha256 === s.claimedHash ? ['確認済み・申告と一致', 'ok'] : ['確認済み・申告と不一致', 'ng'];
   if (s.verified) return ['確認済み', 'ok'];
@@ -110,14 +118,14 @@ function srcState(s) {
 // ---------- packets ----------
 function sourceLines(c) {
   if (!c.sources.length) return ['- なし（問いの本文だけが対象）'];
-  return c.sources.map(s => `- ${s.id}｜${s.kind}｜${s.ref}${s.verified ? `｜Studioで確認済み SHA-256 ${s.verified.sha256}（${s.verified.size} bytes）` : s.claimedHash ? `｜申告 SHA-256 ${s.claimedHash}（未確認）` : '｜未確認'}`);
+  return c.sources.map(s => s.kind === StudioText.TEXT_KIND ? `- ${s.id}｜${s.kind}｜${s.ref}｜${s.verified ? `Studio が保存した本文 SHA-256 ${s.verified.sha256}（${s.verified.size} bytes）` : 'Studio が保存した本文（ハッシュ未計算）'}｜全文は下の「■ 資料本文」` : `- ${s.id}｜${s.kind}｜${s.ref}${s.verified ? `｜Studioで確認済み SHA-256 ${s.verified.sha256}（${s.verified.size} bytes）` : s.claimedHash ? `｜申告 SHA-256 ${s.claimedHash}（未確認）` : '｜未確認'}`);
 }
 function observePacket(c, name) {
   const t = c.tasks[name];
   return [
     `[AI TEAM STUDIO｜観測依頼]  CASE: ${c.id}  TASK: ${t.taskId}  TO: ${name}`, '',
     '■ 問い', c.question, '',
-    '■ 資料（SOURCE）', ...sourceLines(c), '',
+    '■ 資料（SOURCE）', ...sourceLines(c), ...StudioText.sourceBodies(c.sources), '',
     '■ お願い',
     '- ほかのAIの結果は渡していません。あなた自身の観測として答えてください。',
     '- 資料を実際に読めたかどうかを、資料ごとに書いてください。読めなかった内容を推測で埋めないでください。',
@@ -140,7 +148,7 @@ function synthesisPacket(c, name, reviseReason) {
   const task = c.synthesisReq ? c.synthesisReq.task : StudioState.synTaskId(c);
   return [
     `[AI TEAM STUDIO｜統合依頼]  CASE: ${c.id}  TASK: ${task}  TO: ${name}`, '',
-    '■ 問い', c.question, '', '■ 資料（SOURCE）', ...sourceLines(c), '',
+    '■ 問い', c.question, '', '■ 資料（SOURCE）', ...sourceLines(c), ...StudioText.sourceBodies(c.sources), '',
     `■ 独立観測の結果（${done.length}件${missing.length ? '／未着・未確認: ' + missing.join(', ') : ''}）`, ...body, ...revise, '',
     '■ お願い',
     '- 要約や平均にしないでください。共通点・相違点・不明・保留を分け、相違点には生じた層の候補を付けてください。',
@@ -161,7 +169,7 @@ function nextPacket(c, name, task) {
     `■ 人間の判断: ${c.gate.decision}（${hm(c.gate.at)}）`, c.gate.reason || '（理由の記載なし）', '',
     '■ やってほしいこと（作業単位は1つ）', s.NEXT_TASK || '（統合結果にNEXT_TASKがありません）', '',
     '■ 実行に必要な情報・条件', s.EXECUTION_NEEDS || '（記載なし）', '',
-    '■ 資料（SOURCE。状態つき。未確認のものを確認済みとして扱わない）', ...sourceLines(c), '',
+    '■ 資料（SOURCE。状態つき。未確認のものを確認済みとして扱わない）', ...sourceLines(c), ...StudioText.sourceBodies(c.sources), '',
     '■ 確定していないこと（推測で埋めない）', s.UNKNOWN || '（なし）', s.HOLD ? '保留: ' + s.HOLD : '', '',
     '■ 判断の経緯', `- 独立観測: ${StudioState.eligibleObservers(c).join(', ')}`, `- 統合: ${c.synthesis.by}`, `- 共通点: ${oneLine(s.COMMON)}`, '',
     '■ 終わったら、次のブロックを付けて返してください',
@@ -606,7 +614,8 @@ function renderSettings() {
 function bind() {
   $('startBtn').onclick = () => { const q = $('qInput').value.trim(); if (!q) { $('qInput').focus(); return; }
     const names = [...$('obsPick').querySelectorAll('input:checked')].map(x => x.value); if (!names.length) return tell('AIを1つ以上選んでください');
-    $('qInput').value = ''; createCase(q, names); };
+    const premise = { title: $('premiseTitle').value, text: $('premiseInput').value };
+    $('qInput').value = ''; $('premiseInput').value = ''; $('premiseTitle').value = ''; createCase(q, names, premise); };
   $('newCaseBtn').onclick = () => { store.currentId = null; save(); render(); $('qInput').focus(); };
   $('caseList').onclick = e => { const b = e.target.closest('[data-id]'); if (!b) return; store.currentId = b.dataset.id; save(); render(); schedulePoll(); };
   $('pasteBtn').onclick = () => doPaste($('pasteBox').value, '貼り付け');
@@ -621,6 +630,13 @@ function bind() {
       s.id = 'S' + (c.sources.length + 1); c.sources.push(s); log(c, `資料 ${s.id} を追加`); }
     if (skipped.length) tell('登録済みのため追加しませんでした：\n' + skipped.join('\n'));
     bump(c, 'typed'); $('srcAdd').value = ''; save(); render(); verifySources(c); };
+  $('srcTextBtn').onclick = async () => { const c = cur(), t = $('srcText').value; if (!t.trim()) return;
+    const s = await makeTextSource('S' + (c.sources.length + 1), $('srcTextTitle').value, t);
+    if (s.error) return tell(s.error);
+    if (s.verified && c.sources.some(x => x.verified && x.verified.sha256 === s.verified.sha256)) return tell('同じ本文がすでに登録されています');
+    c.sources.push(s); log(c, `資料 ${s.id}（本文「${s.ref}」）を追加`); bump(c, 'paste');
+    $('srcText').value = ''; $('srcTextTitle').value = ''; save(); render();
+    if (Object.values(c.tasks).some(t => t.sentAt)) tell('送付済みの依頼には入っていません。必要なら「作り直して再送」で新しい依頼文にしてください。'); };
   $('srcFile').onchange = async e => { const c = cur(), files = [...e.target.files]; e.target.value = ''; if (!files.length) return;
     for (const f of files) {
       const h = await sha256Hex(await f.arrayBuffer());
@@ -658,6 +674,7 @@ function download(name, text, type) { const a = document.createElement('a'); a.h
 function caseMd(c) {
   const S = StudioState, L = [`# ${c.id}`, '', '## 問い', c.question, '', '## SOURCE'];
   for (const s of c.sources) L.push(`- ${s.id} ${s.kind} ${s.ref} — ${srcState(s)[0]}${s.verified ? ' sha256 ' + s.verified.sha256 : ''}｜読めたか: ${Object.entries(s.access).map(([n, a]) => n + '=' + a.status).join(', ') || '報告なし'}`);
+  for (const s of c.sources) if (s.kind === StudioText.TEXT_KIND) L.push('', `### ${s.id} 本文「${s.ref}」`, '```text', s.text, '```');
   L.push('', '## OBSERVE');
   for (const n of c.observers) { const r = c.tasks[n].result;
     L.push(`### ${n}`, r ? `採用中 ${r.at}（${r.via}・${statusLabel(r)}・${S.eligibleRecord(c, 'RESULT', r, n) ? '利用可能' : '利用不可'}・受信 ${S.receivedCount(c, n)} 件）` : '未着', '');

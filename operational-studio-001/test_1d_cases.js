@@ -149,6 +149,29 @@ test('R-03 AI への指示文（1d-3）', () => {
   check(T.agentInstruction(null) === '', 'パスがなければ空');
 });
 
+
+const NL = String.fromCharCode(10);
+test('T-01 本文の資料を作る（2-1A）', () => {
+  check(T.textSource('S1', 'x', '   ' + NL + ' ', 'h', 1, 't').error, '空白だけの本文は登録しない');
+  check(T.textSource('S1', 'x', 'a'.repeat(T.TEXT_MAX + 1), 'h', 1, 't').error, '上限を超える本文は登録しない');
+  const body = ['本文', '', '二段落目'].join(NL);
+  const s = T.textSource('S2', '  ', body, 'ab'.repeat(32), 20, '2026-10-21T00:00:00Z');
+  check(!s.error && s.kind === T.TEXT_KIND && s.id === 'S2', '種類は本文・ID はそのまま');
+  check(s.ref === '前提資料', '名前が空なら「前提資料」');
+  check(s.text === body, '本文は書き換えない（空行も残す）');
+  check(s.verified && s.verified.sha256 === 'ab'.repeat(32) && s.verified.size === 20, 'ハッシュと大きさを記録');
+  check(T.textSource('S3', 'y', 'z', null, 1, 't').verified === null, 'ハッシュが無ければ未確認のまま');
+});
+
+test('T-02 依頼文に入れる本文の区切り（2-1A）', () => {
+  check(T.sourceBodies([]).length === 0 && T.sourceBodies([{ id: 'S1', kind: 'URL', ref: 'https://x' }]).length === 0, '本文の資料が無ければ何も足さない');
+  const s = T.textSource('S1', '前提', ['一行目', '', '三行目'].join(NL), 'cd'.repeat(32), 10, 't');
+  const b = T.sourceBodies([s]);
+  check(b.includes(s.text), '本文は1つの要素のまま入る（空行を含んだまま）');
+  check(b.filter(x => x !== '').includes(s.text), '空の要素を除く処理（実行タスクの依頼文）を通っても本文は残る');
+  check(b.some(x => x.startsWith('--- S1「前提」 SHA-256 ' + 'cd'.repeat(32))) && b.includes('--- S1 ここまで ---'), '区切りに ID・名前・ハッシュ');
+});
+
 return results;
 }
 if (typeof module !== 'undefined') module.exports = { run1d };

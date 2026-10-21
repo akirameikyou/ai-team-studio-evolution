@@ -3,6 +3,7 @@
 //   extractSources(text, { bareNames })  SOURCE candidates in a text (1d-1)
 //   splitDifferences(value)              items of a synthesis DIFFERENCES value, for display only (1d-2)
 //   relaySafeName / relayPaths / agentInstruction   relay file names, paths and the text to give an AI (1d-3)
+//   textSource / sourceBodies            premise text held by the Studio as a SOURCE, and its block in requests (2-1A)
 (function (global) {
   // 1d-1: URLs and absolute paths are always taken. Bare file names ("report.pdf") are taken only when a person typed them
   // into "add SOURCE" (bareNames: true, the default). From the question they are not: a file name mentioned in a question is
@@ -76,5 +77,24 @@
       '依頼ファイルが無いとき、または依頼文の TASK がフォルダ名と合わないときは、何も書かずに止まって知らせてください。'].join('\n');
   }
 
-  global.StudioText = { extractSources, splitDifferences, LAYERS, relaySafeName, relayPaths, agentInstruction };
+  // 2-1A: a SOURCE whose full text the Studio holds (a premise pasted by the person). The text goes into every request in
+  // full, between delimiters, as one element so that blank lines inside it survive the filters of the packet builders.
+  // sha256 / size are computed by the caller (Web Crypto is async); without them the SOURCE stays unverified.
+  const TEXT_KIND = '本文', TEXT_MAX = 200000;
+  function textSource(id, title, text, sha256, size, at) {
+    const t = String(text == null ? '' : text);
+    if (!t.trim()) return { error: '本文が空です' };
+    if (t.length > TEXT_MAX) return { error: `本文が長すぎます（${t.length}文字。上限 ${TEXT_MAX}文字）` };
+    return { id, kind: TEXT_KIND, ref: String(title || '').trim() || '前提資料', text: t, claimedHash: null,
+      verified: sha256 ? { sha256, size, by: 'Studio（本文を保存）', at } : null, access: {} };
+  }
+  function sourceBodies(sources) {
+    const list = (sources || []).filter(s => s.kind === TEXT_KIND && typeof s.text === 'string');
+    if (!list.length) return [];
+    const out = ['', '■ 資料本文（Studio が保存した全文。そのまま読んでください）'];
+    for (const s of list) out.push(`--- ${s.id}「${s.ref}」${s.verified ? ` SHA-256 ${s.verified.sha256}` : ''} ---`, s.text, `--- ${s.id} ここまで ---`);
+    return out;
+  }
+
+  global.StudioText = { extractSources, splitDifferences, LAYERS, relaySafeName, relayPaths, agentInstruction, TEXT_KIND, TEXT_MAX, textSource, sourceBodies };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -13,7 +13,7 @@ Binds to 127.0.0.1 only. CORS is limited to localhost and the project's GitHub P
 Run:  python studio_proxy.py            (port 8787)
       python studio_proxy.py --port 9000
 """
-import argparse, hashlib, json, os, re, sys, urllib.error, urllib.parse, urllib.request
+import argparse, hashlib, json, os, re, sys, time, urllib.error, urllib.parse, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -21,6 +21,7 @@ HERE = Path(__file__).resolve().parent
 EXCHANGE = HERE / 'exchange'
 ALLOWED_ORIGINS = re.compile(r'^(https?://(127\.0\.0\.1|localhost)(:\d+)?|https://akirameikyou\.github\.io)$')
 MAX_FETCH = 50 * 1024 * 1024
+SETTLE_SECONDS = 2  # a reply file changed more recently than this may still be being written by an agent
 
 
 def load_env():
@@ -38,6 +39,17 @@ def safe(part):
     if not s or s in ('.', '..'):
         raise ValueError('bad path component')
     return s
+
+
+def write_atomic(path, text):
+    """Write text as UTF-8 bytes, exactly (no newline translation), and publish it only when complete:
+    the bytes go to a temporary name in the same folder and os.replace() gives it the final name."""
+    tmp = path.with_name('.' + path.name + '.tmp')
+    with open(tmp, 'wb') as f:
+        f.write(text.encode('utf-8'))
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
 
 
 def providers():
@@ -121,6 +133,9 @@ class Handler(BaseHTTPRequestHandler):
                 p = EXCHANGE / safe(q['case']) / safe(q['task']) / f"from-{safe(q['to'])}.md"
                 if not p.exists():
                     return self.reply(200, {'pending': True})  # 200, not 404: polling is normal and should not log errors
+                if time.time() - p.stat().st_mtime < SETTLE_SECONDS:
+                    return self.reply(200, {'pending': True, 'settling': True})  # possibly half-written by an agent
+                # Read with universal newlines: a reply written with CRLF reaches the Studio with LF (by design).
                 return self.reply(200, {'text': p.read_text(encoding='utf-8')})
             if u.path == '/hash':
                 url = q.get('url', '')
@@ -145,7 +160,7 @@ class Handler(BaseHTTPRequestHandler):
             j = json.loads(self.rfile.read(min(n, 5_000_000)).decode())
             case, task, to, route, packet = j['case'], j['task'], j['to'], j.get('route', 'agent'), j['packet']
             d = EXCHANGE / safe(case) / safe(task); d.mkdir(parents=True, exist_ok=True)
-            (d / f'to-{safe(to)}.md').write_text(packet, encoding='utf-8')
+            write_atomic(d / f'to-{safe(to)}.md', packet)  # byte-identical to the packet the Studio hashed
             if route == 'agent':
                 to_file, from_file = d / f'to-{safe(to)}.md', d / f'from-{safe(to)}.md'
                 return self.reply(200, {'queued': True, 'toFile': str(to_file), 'fromFile': str(from_file),
@@ -159,7 +174,7 @@ class Handler(BaseHTTPRequestHandler):
                 text = {'openai': call_openai, 'anthropic': call_anthropic, 'gemini': call_gemini}[prov](packet)
             else:
                 return self.reply(400, {'error': f'unknown route {route}'})
-            (d / f'from-{safe(to)}.md').write_text(text, encoding='utf-8')
+            write_atomic(d / f'from-{safe(to)}.md', text)
             return self.reply(200, {'text': text, 'note': route})
         except urllib.error.HTTPError as e:
             return self.reply(502, {'error': f'API HTTP {e.code}'})
