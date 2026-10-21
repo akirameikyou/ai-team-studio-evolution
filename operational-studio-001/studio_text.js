@@ -193,9 +193,24 @@
   // The conditions of a run, recorded with the reply (D1): how it was carried, for comparing with replies carried by hand.
   function runnerConditionText(cond) {
     if (!cond || typeof cond !== 'object') return '';
-    return [cond.runner || '実行係', cond.preamble && '前置き ' + cond.preamble, cond.codex, cond.sandbox,
-      cond.effort && '推論の強さ ' + cond.effort].filter(Boolean).join('・');
+    const effort = cond.effort && '推論の強さ ' + cond.effort + (cond.effortReported ? `（Codex の表示 ${cond.effortReported}）` : '');
+    return [cond.runner || '実行係', cond.preamble && '前置き ' + cond.preamble, cond.codex, cond.sandbox, effort,
+      cond.modelReported && cond.modelReported !== 'unknown' && 'モデル ' + cond.modelReported].filter(Boolean).join('・');
+  }
+  // 3-1-r2 R2: the relay compares the reply file with the hash the runner recorded ('match' | 'mismatch' | 'unverifiable').
+  function runnerCheckText(check) {
+    if (check === 'mismatch') return '実行係の記録と返事が一致しません（実行の後で返事が差し替えられた可能性があります）';
+    if (check === 'unverifiable') return '実行係の記録と返事を照合できません（古い実行係か、記録の不備）';
+    return '';
+  }
+  // The names of the items a person confirms (D8 = A), shared by the screen and the Markdown export.
+  function confirmationLabel(it) {
+    return it === 'UNCLOSED' ? '閉じタグなし（途中で切れていないか）'
+      : it === 'CLASSIFICATION_UNCERTAIN' ? '項目名を認識できない行がある（値の分類が未確定）'
+      : it === 'RUNNER_UNVERIFIED' ? '実行係の記録で裏付けられない返事（一致しない・照合できない）'
+      : it.startsWith('TEMPLATE_VALUE:') ? it.slice(15) + ' が依頼文の見本と同じ文言'
+      : it.startsWith('DUPLICATE_KEY:') ? it.slice(14) + ' が2回あり値が違う（最初の値を使用）' : it;
   }
 
-  global.StudioText = { extractSources, splitDifferences, LAYERS, relaySafeName, relayPaths, agentInstruction, TEXT_KIND, TEXT_MAX, textSource, sourceBodies, isDuplicateText, fenceFor, caseIdFor, parseStoreSnapshot, studioSettingsFrom, runnerLabel, runnerGuideNote, runnerConditionText };
+  global.StudioText = { extractSources, splitDifferences, LAYERS, relaySafeName, relayPaths, agentInstruction, TEXT_KIND, TEXT_MAX, textSource, sourceBodies, isDuplicateText, fenceFor, caseIdFor, parseStoreSnapshot, studioSettingsFrom, runnerLabel, runnerGuideNote, runnerConditionText, runnerCheckText, confirmationLabel };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

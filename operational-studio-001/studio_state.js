@@ -41,16 +41,23 @@
     for (const e of confirmations(c)) if (e.attemptId === attemptId) last[e.item] = e.action;
     return Object.keys(last).filter(k => last[k] === 'confirm');
   }
+  // 3-1-r2 R2 (G1): a reply the runner's record does not vouch for (the relay found it different from what the runner
+  // published, or could not compare) is adopted as before but needs this confirmation before it may be used.
+  const RUNNER_UNVERIFIED = 'RUNNER_UNVERIFIED';
+  function runnerConfirmations(c, id) {
+    const a = attempts(c).find(x => x.attemptId === id);
+    return a && (a.runnerCheck === 'mismatch' || a.runnerCheck === 'unverifiable') ? [RUNNER_UNVERIFIED] : [];
+  }
   function eligibleRecord(c, kind, rec, name, opts = {}) {
     if (!rec) return false;
     if (!rec.status) return true;                                   // old format
-    const id = resultAttemptId(c, kind, rec, name);
-    return P().eligible({ ...rec, confirmation: { items: confirmedItems(c, id) } }, opts);
+    const id = resultAttemptId(c, kind, rec, name), done = confirmedItems(c, id);
+    return P().eligible({ ...rec, confirmation: { items: done } }, opts) && runnerConfirmations(c, id).every(x => done.includes(x));
   }
   function pendingConfirmations(c, kind, rec, name, opts = {}) {
     if (!rec || !rec.status) return [];
-    const done = new Set(confirmedItems(c, resultAttemptId(c, kind, rec, name)));
-    return P().requiredConfirmations(rec, opts).filter(x => !done.has(x));
+    const id = resultAttemptId(c, kind, rec, name), done = new Set(confirmedItems(c, id));
+    return P().requiredConfirmations(rec, opts).concat(runnerConfirmations(c, id)).filter(x => !done.has(x));
   }
 
   // ---------- counts ----------
@@ -154,12 +161,13 @@
     return 'adopted';
   }
 
-  // One receipt (paste / file / relay / API). meta = { via, now, rawSha256, expectedTask, runner? }.
+  // One receipt (paste / file / relay / API). meta = { via, now, rawSha256, expectedTask, runner?, runnerCheck? }.
   function receive(c, text, meta) {
     const now = meta.now, parsed = parseAll(text);
     const a = { attemptId: newId('A', now), at: now, via: meta.via, raw: text, rawSha256: meta.rawSha256 || null, expectedTask: meta.expectedTask || null,
                 parsed, ruleVersion: P().RULE_VERSION, templateTableVersion: P().TEMPLATE_TABLE_VERSION, picked: null, notAdopted: [], assignment: null, outcome: null };
     if (meta.runner) a.runner = meta.runner;   // 3-1 (D1): how a relay reply was produced (runner conditions); absent otherwise
+    if (meta.runnerCheck) a.runnerCheck = meta.runnerCheck;   // 3-1-r2 R2: 'mismatch' | 'unverifiable' (no conditions then)
     (c.parseAttempts = c.parseAttempts || []).push(a);                                            // R-1: record first
     const usable = TAGS.filter(([k]) => parsed[k] && ADOPTABLE.includes(parsed[k].status)).map(([k]) => k);
     if (usable.length) {
@@ -291,7 +299,7 @@
   const canRetry = (c, kind, name) => deliveryState(currentRequest(c, kind, name)) === 'failed';
 
   global.StudioState = {
-    KEYS, attempts, obsRevision, synRevision, confirmedItems, eligibleRecord, pendingConfirmations, eligibleObservers, receivedCount,
+    KEYS, attempts, obsRevision, synRevision, confirmedItems, eligibleRecord, pendingConfirmations, eligibleObservers, receivedCount, RUNNER_UNVERIFIED,
     synthesisStale, gateStale, nextStale, doneStale, staleReason, canRequestSynthesis, canGate, canSendNext, canCountDone, synthesisEligible,
     obsTaskId, synTaskId, nextTaskId, obsGen, synGen, nextGen, resultAttemptId,
     receive, assign, unassigned, setConfirmation, startSynthesisRequest, recordGate, startNext, startObservationResend,

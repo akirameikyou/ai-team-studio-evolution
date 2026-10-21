@@ -333,6 +333,45 @@ class RelayFileTests(unittest.TestCase):
         self.assertEqual((d / '.codex-run').read_bytes(), before)
         self.assertEqual(sorted(p.name for p in d.iterdir()), ['.codex-run'])
 
+    # --- 3-1-r2 R2: the reply and the runner's record are tied by the SHA-256 of the file's bytes ---
+    def done_reply(self, body, claim_extra):
+        d = self.codex_dir({**self.CLAIM, 'state': 'done', 'seconds': 11, **claim_extra})
+        f = d / 'from-Codex.md'; f.write_bytes(body)
+        old = time.time() - sp.SETTLE_SECONDS - 1; os.utime(f, (old, old))
+        return self.result('C1', 'C1-OBS-Codex', 'Codex')
+
+    def test_r2_a_reply_with_the_hash_the_runner_recorded_is_a_match(self):
+        body = '返事'.encode('utf-8')
+        r = self.done_reply(body, {'replySha256': hashlib.sha256(body).hexdigest()})
+        self.assertEqual(r['text'], '返事'); self.assertEqual(r['runner']['check'], 'match')
+        self.assertNotIn('replySha256', r['runner'])                   # only the result of the comparison is returned
+
+    def test_r2_a_reply_replaced_after_the_run_is_a_mismatch(self):
+        r = self.done_reply('人が差し替えた返事'.encode('utf-8'), {'replySha256': hashlib.sha256('返事'.encode('utf-8')).hexdigest()})
+        self.assertEqual(r['runner']['check'], 'mismatch'); self.assertEqual(r['text'], '人が差し替えた返事')
+
+    def test_r2_a_missing_or_malformed_hash_cannot_be_verified(self):
+        for extra in ({}, {'replySha256': 'abc'}, {'replySha256': 'G' * 64}, {'replySha256': 123}):
+            with self.subTest(extra=extra):
+                self.assertEqual(self.done_reply(b'x', extra)['runner']['check'], 'unverifiable')
+
+    def test_r2_the_hash_is_of_the_bytes_before_newline_conversion(self):
+        body = '一行目\r\n二行目\r\n'.encode('utf-8')
+        r = self.done_reply(body, {'replySha256': hashlib.sha256(body).hexdigest()})
+        self.assertEqual(r['text'], '一行目\n二行目\n'); self.assertEqual(r['runner']['check'], 'match')
+
+    def test_r2_no_comparison_without_a_reply_or_for_other_states(self):
+        self.codex_dir({**self.CLAIM, 'state': 'done', 'replySha256': '0' * 64})
+        self.assertNotIn('check', self.result('C1', 'C1-OBS-Codex', 'Codex')['runner'])   # nothing to compare yet
+        r = self.done_reply(b'x', {'state': 'conflict', 'savedSha256': hashlib.sha256(b'x').hexdigest()})
+        self.assertNotIn('check', r['runner'])                                              # only a done claim vouches for from-
+
+    def test_r5_the_reported_model_and_effort_are_passed_on(self):
+        cond = {**self.CLAIM['condition'], 'modelReported': 'gpt-6-luna', 'effortReported': 'low'}
+        self.codex_dir({**self.CLAIM, 'condition': cond})
+        c = self.result('C1', 'C1-OBS-Codex', 'Codex')['runner']['condition']
+        self.assertEqual((c['modelReported'], c['effortReported']), ('gpt-6-luna', 'low')); self.assertNotIn('secret', c)
+
 
 if __name__ == '__main__':
     unittest.main()

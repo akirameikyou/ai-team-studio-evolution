@@ -1,4 +1,4 @@
-状態: 仕様書 v0.9（正本・Codex 監査前）／ 段階3-1（Codex 実行係の状態表示）を追加。それより前は v0.8 r2 のまま
+状態: 仕様書 v0.10（正本・Codex 再監査前）／ 段階3-1-r2（監査対応）を §14 の X-9〜X-16 に追加。段階3-1は v0.9、それより前は v0.8 r2 のまま
 sender: CLAUDE_CODE
 件名: AI Team Studio（operational-studio-001 系）仕様書 ― 解析・状態・依頼記録・回収・送付・文字列処理の正本（版は「状態」の行と改訂の履歴で示す）
 作成: 2026-10-15（v0.6）。計画 P1（文書の一本化）。ユーザーの依頼「GPTと検討のうえ進行」と、GPT との合意（10/15）による。
@@ -259,6 +259,16 @@ sender: CLAUDE_CODE
  X-7 「AIへの指示を表示」は、実行中・待機中なら「貼らないでください（二重に実行される）」を、失敗・読めないときは手動に戻す3手順（codex-run.log を見る／.codex-run を消す／指示を渡す）を、衝突なら両方のファイルの場所を、先頭に出す。
  X-8（D1）runner.state が done のときに回収した返事は、受信の記録に runner＝{ condition, seconds } を付ける（無い受信は従来どおり項目なし）。採用中の観測に「運んだ経路」として表示する。
 
+ ── 3-1-r2（2026-10-21。Codex 監査 A1〜A12・GPT の検討 G1〜G3 への対応。仕様書「3-1-r2 実装仕様書 v0.1」）──
+ X-9（R1）返事の公開はハードリンク（os.link。宛先があれば失敗し、上書きしない）→ 一時ファイルを消す。from-Codex.md が先にあれば from-Codex.runner.md、-2、-3 … -99 の最初に作れた名前に置く。印に saved と savedSha256。予期しない例外でも印は failed（理由は例外の種類）になり、一時ファイルは残らない。ログは消さない。
+ X-10（R2・G1）done の印に、公開したバイト列の SHA-256（replySha256）を書く。中継の /result は返事ファイルを1回だけ read_bytes し、そのバイト列（改行変換の前）で照合して runner.check を返す：match（一致）／mismatch（不一致）／unverifiable（ハッシュが無い・64桁の16進数でない）。replySha256 そのものは返さない。check は done の印のときだけ。本文はそのバイト列から作り、改行は従来どおり LF にそろえる。
+ X-11（R2・G1）スタジオは check が match のときだけ受信の記録に runner＝{ condition, seconds, check } を付ける。それ以外（check が無い古い中継を含む）は runnerCheck＝mismatch／unverifiable だけを記録し、確認の項目 RUNNER_UNVERIFIED を必須にする（studio_state.js。parse_v2.js の規則には足さない）。採用の規則は変えない：採用はするが、確認するまで利用不可（統合・判断に使えない）。観測・統合の欄に「一致しません／照合できません」と出す。ハッシュは中身が同じかを確かめるだけで、誰が書いたかの証明ではない（印と返事の両方を書き換えられる者は見分けられない）。
+ X-12（R3）--task は受け渡しフォルダの中の <CASE>/<TASK> だけを受け付け、途中のリンクを拒む。依頼文は見出し（最初の空でない行）だけを照合し、CASE・TASK・TO がちょうど1つずつあって、CASE＝親フォルダ名、TASK＝フォルダ名、TO＝Codex でなければ送らない。本文の TASK（返事の見本ブロック）は見ない。
+ X-13（R4）--effort は low・medium・high・xhigh・max だけ（models_cache.json の supported_reasoning_levels）。ほかは実行しない。
+ X-14（R5）codex-run.log に、起動引数（依頼文は標準入力なので含まれない）・開始時刻・秒数・終了コード・時間切れ・stderr の見出しの model・reasoning effort・sandbox・approval の行を残す。見出しより後（依頼文の再掲）と session id は残さない。失敗のときは ERROR／error で始まる行を5行まで。印の condition に modelReported・effortReported を足す（中継はこの2つも返す）。表示 high は値が渡ったことを示すだけで、回答の質への効果の証明ではない。
+ X-15（R6）Codex は許可した環境変数だけで起動する（ENV_ALLOW：SYSTEMROOT・PATH・TEMP・USERPROFILE・LOCALAPPDATA・APPDATA・CODEX_HOME など、秘密を含まない系統の変数）。中継が .env から読んだ API キーなどは Codex に渡らない。
+ X-16（A1・保護 P1。コードの外）運用中の proxy\.env には CodexSandboxUsers の読み取り拒否（icacls /deny）を付けた。.env を作り直すと消えることがあるので、作り直したら確かめる。調査と結果は「A1_アクセス範囲調査_結果.md」。
+
 ════════════════════════════════════════
 第II部　実装・試験との対応（事実。2026-10-15 時点）
 ════════════════════════════════════════
@@ -337,6 +347,7 @@ C. 仕様と実装・文書の不一致（P1 の一覧。対応する段階）
  12. NEXT_TASK を画面で直せない。今回は GATE 理由で補えたが、編集機能が要らないということではない（GPT）。→ 保留
 
 改訂の履歴
+ v0.10（2026-10-21）：段階3-1-r2。§14 に X-9〜X-16（R1〜R6・保護 P1）。X-5 の項目に modelReported・effortReported、/result に check。X-8 の条件の記録は X-11 の照合が match のときだけ。第II部・第III部は未更新（README・TEST_REPORT に記載）。
  v0.9（2026-10-21）：段階3-1。§14（Codex 実行係 X-1〜X-8）を新設。中継の /result に runner を追加。受信の記録に任意の項目 runner を追加。第II部・第III部は未更新（段階3-1の対応は README と TEST_REPORT に記載）。
  v0.8 r2（2026-10-15）：Codex C52 に対応。第II部の対応表を更新（削除した isAgent・agentPaths を agentTarget などに、1c を Q-08・C-11 まで）。
  v0.8 r1（2026-10-15）：Codex C51 に対応。中継が agent 経路で書いたファイルのパスを返し、送付の記録（Q-2）に経路とパスを残す。案内は送付の記録に従う（W-5）。受け渡しフォルダの記録を中継 URL に結び付ける。S-3 を推定用と明記し、Unicode の版の違いを制約として記載。

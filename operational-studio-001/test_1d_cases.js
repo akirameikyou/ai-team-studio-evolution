@@ -287,6 +287,21 @@ test('RN-03 観測の条件の文（記録された条件を表示）', () => {
   check(T.runnerConditionText({}) === '実行係', '中身が無くても経路だけは出す');
 });
 
+test('RN-05 実際に使われたモデルと推論の強さ（3-1-r2 R5）', () => {
+  const s = T.runnerConditionText({ runner: 'codex_runner 0.3', preamble: 'P1', codex: 'codex-cli 0.163.0', sandbox: 'read-only', effort: 'high', modelReported: 'gpt-6-luna', effortReported: 'high' });
+  check(s === 'codex_runner 0.3・前置き P1・codex-cli 0.163.0・read-only・推論の強さ high（Codex の表示 high）・モデル gpt-6-luna', '指定と Codex の表示の両方 ' + s);
+  check(T.runnerConditionText({ effort: 'default', effortReported: 'unknown' }) === '実行係・推論の強さ default（Codex の表示 unknown）', '表示が読めなかったときも、そう出す');
+});
+
+test('RN-06 実行係の記録と返事の照合（3-1-r2 R2）', () => {
+  check(T.runnerCheckText('match') === '' && T.runnerCheckText(undefined) === '', '一致・照合なしでは何も出さない');
+  check(T.runnerCheckText('mismatch').includes('一致しません') && T.runnerCheckText('mismatch').includes('差し替え'), '不一致は差し替えの可能性');
+  check(T.runnerCheckText('unverifiable').includes('照合できません'), '照合できないときはそう出す');
+  check(T.confirmationLabel('RUNNER_UNVERIFIED').includes('実行係'), '確認の項目の名前');
+  check(T.confirmationLabel('UNCLOSED') === '閉じタグなし（途中で切れていないか）', '既存の項目の名前は変わらない');
+  check(T.confirmationLabel('TEMPLATE_VALUE:OBSERVATION') === 'OBSERVATION が依頼文の見本と同じ文言', '既存の項目の名前（見本）');
+});
+
 return results;
 }
 if (typeof module !== 'undefined') module.exports = { run1d };

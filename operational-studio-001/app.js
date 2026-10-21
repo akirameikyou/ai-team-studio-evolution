@@ -287,9 +287,10 @@ function describeAttempt(a) {
   if (a.notAdopted.length) s += `／同じ貼り付けの中の ${a.notAdopted.map(x => TAG_LABEL[x.tag]).join('・')} は採用していません（優先順で後）`;
   return s;
 }
-async function receiveText(c, text, via, expectedTask, runner) {
+async function receiveText(c, text, via, expectedTask, ran) {
   let h = null; try { h = await sha256Hex(new TextEncoder().encode(text)); } catch (_) { }
-  const a = StudioState.receive(c, text, { via, now: now(), rawSha256: h, expectedTask: expectedTask || null, runner: runner || null });
+  const a = StudioState.receive(c, text, { via, now: now(), rawSha256: h, expectedTask: expectedTask || null,
+    runner: (ran && ran.runner) || null, runnerCheck: (ran && ran.runnerCheck) || null });
   if (a.assignment && a.assignment.kind === 'RESULT' && a.outcome === 'adopted') updateAccess(c, a.assignment.name);
   log(c, `受信 ${a.attemptId}（${via}）: ${describeAttempt(a)}`);
   return a;
@@ -476,9 +477,14 @@ async function collectOnce(c, quiet) {
       const text = typeof res === 'string' ? res : res && res.text, run = res && typeof res === 'object' ? res.runner || null : null;
       const key = c.id + '|' + taskId;
       if (JSON.stringify(runnerStates.get(key) || null) !== JSON.stringify(run)) { if (run) runnerStates.set(key, run); else runnerStates.delete(key); shown = true; }
-      // D1: a reply the runner produced is recorded with the conditions it ran under.
-      const cond = run && run.state === 'done' && run.condition ? { condition: run.condition, seconds: Number.isInteger(run.seconds) ? run.seconds : null } : null;
-      if (text && !seen(taskId, text)) { await receiveText(c, text, 'ローカル中継', taskId, cond); bump(c, 'autoReceive'); got++; } }
+      // D1 / 3-1-r2 R2: the runner's conditions are recorded only when the relay found the reply equal to what the runner
+      // published ('match'). Otherwise (or when an older relay sends no check) the receipt is marked and needs confirming.
+      const ran = run && run.state === 'done'
+        ? run.check === 'match' && run.condition
+          ? { runner: { condition: run.condition, seconds: Number.isInteger(run.seconds) ? run.seconds : null, check: 'match' } }
+          : { runnerCheck: run.check === 'mismatch' ? 'mismatch' : 'unverifiable' }
+        : null;
+      if (text && !seen(taskId, text)) { await receiveText(c, text, 'ローカル中継', taskId, ran); bump(c, 'autoReceive'); got++; } }
     catch (e) { if (!quiet) log(c, `${n} の回収に失敗（${e.message}）`); }
   }
   if (got) { save(); render(); }
@@ -584,7 +590,7 @@ function confirmControls(c, kind, rec, name) {
   const id = StudioState.resultAttemptId(c, kind, rec, name);
   const pending = StudioState.pendingConfirmations(c, kind, rec, name);
   const done = StudioState.confirmedItems(c, id);
-  const label = it => it === 'UNCLOSED' ? '閉じタグなし（途中で切れていないか）' : it === 'CLASSIFICATION_UNCERTAIN' ? '項目名を認識できない行がある（値の分類が未確定）' : it.startsWith('TEMPLATE_VALUE:') ? it.slice(15) + ' が依頼文の見本と同じ文言' : it.startsWith('DUPLICATE_KEY:') ? it.slice(14) + ' が2回あり値が違う（最初の値を使用）' : it;
+  const label = StudioText.confirmationLabel;
   return (pending.length ? `<div class="warn">確認が必要：${pending.map(it => `<div>${esc(label(it))} <button class="btn" data-confirm="${esc(id)}" data-item="${esc(it)}">確認した</button></div>`).join('')}</div>` : '')
     + (done.length ? `<div class="hint">確認済み：${done.map(it => `${esc(label(it))} <button class="btn ghost" data-revoke="${esc(id)}" data-item="${esc(it)}">取り消す</button>`).join(' ')}</div>` : '');
 }
@@ -601,6 +607,7 @@ function renderObservers(c) {
     const gen = S.obsGen(c, n), req = S.currentRequest(c, 'OBS', n), failed = S.canRetry(c, 'OBS', n);
     const run = !r ? StudioText.runnerLabel(runnerOf(c, t.taskId), { received: received(c, t.taskId) }) : null;
     const ra = r && r.attemptId ? S.attempts(c).find(a => a.attemptId === r.attemptId) : null, carried = ra && ra.runner ? StudioText.runnerConditionText(ra.runner.condition) : '';
+    const unvouched = ra ? StudioText.runnerCheckText(ra.runnerCheck) : '';
     return `<div class="item"><div class="item-h"><b>${esc(n)}</b>${st}<span class="chip">受信 ${recv}</span><span class="chip">${os.connector === 'manual' ? '手動' : 'ローカル中継'}</span>${gen > 1 ? `<span class="chip">依頼 第${gen}回</span>` : ''}
       ${run ? `<span class="chip ${run.level}">${esc(run.text)}</span>` : ''}
       ${failed ? '<span class="chip ng">送付に失敗</span>' : ''}
@@ -608,6 +615,7 @@ function renderObservers(c) {
       ${t.sentAt && !r && !failed && agentTarget(c, 'OBS', n) ? `<button class="btn" data-guide="${esc(n)}">AIへの指示を表示</button>` : ''}
       ${obsSending(c, n) ? '<button class="btn" disabled>送付中…</button>' : `${failed ? `<button class="btn primary" data-retry="${esc(n)}">同じ依頼を送り直す</button>` : ''}
       ${failed && !t.sentAt ? '' : `<button class="btn" data-send="${esc(n)}">${t.sentAt ? '作り直して再送（新しい世代）' : os.connector === 'manual' ? '依頼文をコピー' : '送る'}</button>`}`}</div>
+      ${unvouched ? `<div class="warn">${esc(unvouched)}</div>` : ''}
       ${r ? confirmControls(c, 'RESULT', r, n) : ''}
       ${r ? `<dl class="obs-body"><dt>観測</dt><dd>${esc(r.fields.OBSERVATION || '（ブロックなし。原文を保存）')}</dd><dt>根拠</dt><dd>${esc(r.fields.EVIDENCE || '—')}</dd><dt>不明</dt><dd>${esc(r.fields.UNKNOWN || '—')}</dd><dt>観測条件</dt><dd>${esc(r.fields.CONDITION || '—')}</dd>${carried ? `<dt>運んだ経路</dt><dd>${esc(carried)}</dd>` : ''}</dl><details><summary class="hint">原文</summary><pre>${esc(r.raw)}</pre></details>` : ''}</div>`; }).join('');
   $('observers').querySelectorAll('[data-send]').forEach(b => b.onclick = () => send(c, b.dataset.send, 'observe'));
@@ -658,7 +666,8 @@ function renderSynthesis(c) {
     const br = $('synthesis').querySelector('[data-retry-syn]'); if (br) br.onclick = () => retrySend(c, 'SYN');
     return; }
   const f = c.synthesis.fields; const L = [['共通点', 'COMMON'], ['相違点', 'DIFFERENCES'], ['不明', 'UNKNOWN'], ['保留', 'HOLD'], ['実行に必要なこと', 'EXECUTION_NEEDS'], ['次のTask', 'NEXT_TASK'], ['人間が決めること', 'GATE_QUESTION']];
-  $('synthesis').innerHTML = `${staleBanner(c, 'SYN')}<div class="hint">統合: ${esc(c.synthesis.by)}（${hm(c.synthesis.at)}・${esc(statusLabel(c.synthesis))}）${c.synthesis.missing.length ? '・不足項目 ' + c.synthesis.missing.join(', ') : ''}</div>${confirmControls(c, 'SYN', c.synthesis)}<dl class="obs-body">${L.map(([j, k]) => `<dt>${j}</dt><dd>${esc(f[k] || '—')}</dd>`).join('')}</dl>`;
+  const sa = c.synthesis.attemptId ? StudioState.attempts(c).find(a => a.attemptId === c.synthesis.attemptId) : null, synUnvouched = sa ? StudioText.runnerCheckText(sa.runnerCheck) : '';   // 3-1-r2 R2
+  $('synthesis').innerHTML = `${staleBanner(c, 'SYN')}<div class="hint">統合: ${esc(c.synthesis.by)}（${hm(c.synthesis.at)}・${esc(statusLabel(c.synthesis))}）${c.synthesis.missing.length ? '・不足項目 ' + c.synthesis.missing.join(', ') : ''}</div>${synUnvouched ? `<div class="warn">${esc(synUnvouched)}</div>` : ''}${confirmControls(c, 'SYN', c.synthesis)}<dl class="obs-body">${L.map(([j, k]) => `<dt>${j}</dt><dd>${esc(f[k] || '—')}</dd>`).join('')}</dl>`;
   bindConfirm(c, $('synthesis'));
 }
 function renderGate(c) {

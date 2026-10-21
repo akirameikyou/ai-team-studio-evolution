@@ -280,5 +280,56 @@ test('世代と Task ID', () => {
   check(c.tasks['Claude Code'].taskId === 'CASE-T-OBS-ClaudeCode-3', '再送2回で世代3');
 });
 
+// 3-1-r2 R2 (G1): a reply the runner's record does not vouch for is adopted as before, but needs a person's confirmation.
+const recvRun = (c, text, task, meta) => S.receive(c, text, { via: 'ローカル中継', now: t(), rawSha256: null, expectedTask: task, ...meta });
+test('RN-B1 実行係の記録と一致した返事は、今までどおり使える', () => {
+  const c = newCase(), task = 'CASE-T-OBS-GPT';
+  const a = recvRun(c, R('GPT', task), task, { runner: { condition: { route: 'runner' }, seconds: 3, check: 'match' } });
+  check(a.outcome === 'adopted' && a.runner && a.runner.check === 'match' && !a.runnerCheck, '採用し、条件を記録（照合の印は付かない）');
+  check(S.pendingConfirmations(c, 'RESULT', c.tasks.GPT.result, 'GPT').length === 0, '確認の項目は増えない');
+  check(S.eligibleRecord(c, 'RESULT', c.tasks.GPT.result, 'GPT'), '利用可能');
+});
+test('RN-B2 一致しない・照合できない返事は、採用するが確認するまで使えない', () => {
+  for (const check_ of ['mismatch', 'unverifiable']) {
+    const c = newCase(), task = 'CASE-T-OBS-GPT';
+    const a = recvRun(c, R('GPT', task), task, { runnerCheck: check_ });
+    check(a.outcome === 'adopted' && a.runnerCheck === check_ && !a.runner, check_ + '：採用は今までどおり・条件は付かない・照合の結果を記録');
+    const rec = c.tasks.GPT.result;
+    check(JSON.stringify(S.pendingConfirmations(c, 'RESULT', rec, 'GPT')) === JSON.stringify([S.RUNNER_UNVERIFIED]), check_ + '：確認の項目 RUNNER_UNVERIFIED が必須');
+    check(!S.eligibleRecord(c, 'RESULT', rec, 'GPT'), check_ + '：確認前は利用不可');
+    check(S.eligibleObservers(c).length === 0, check_ + '：統合に使える観測に数えない');
+    S.setConfirmation(c, S.resultAttemptId(c, 'RESULT', rec, 'GPT'), S.RUNNER_UNVERIFIED, 'confirm', t());
+    check(S.eligibleRecord(c, 'RESULT', rec, 'GPT'), check_ + '：確認した後は利用可能');
+    S.setConfirmation(c, S.resultAttemptId(c, 'RESULT', rec, 'GPT'), S.RUNNER_UNVERIFIED, 'revoke', t());
+    check(!S.eligibleRecord(c, 'RESULT', rec, 'GPT'), check_ + '：取り消すと再び利用不可');
+  }
+});
+test('RN-B3 返事の規則による確認と、実行係の確認は両方とも必要', () => {
+  const c = newCase(), task = 'CASE-T-OBS-GPT';
+  recvRun(c, R('GPT', task, { OBSERVATION: '観測したこと・答え' }), task, { runnerCheck: 'mismatch' });   // TEMPLATE_VALUE too
+  const rec = c.tasks.GPT.result, id = S.resultAttemptId(c, 'RESULT', rec, 'GPT');
+  const p = S.pendingConfirmations(c, 'RESULT', rec, 'GPT');
+  check(p.includes(S.RUNNER_UNVERIFIED) && p.some(x => x.startsWith('TEMPLATE_VALUE:')), '2種類の確認がどちらも必要 ' + p.join(','));
+  S.setConfirmation(c, id, S.RUNNER_UNVERIFIED, 'confirm', t());
+  check(!S.eligibleRecord(c, 'RESULT', rec, 'GPT'), '実行係の確認だけでは使えない');
+  for (const it of S.pendingConfirmations(c, 'RESULT', rec, 'GPT')) S.setConfirmation(c, id, it, 'confirm', t());
+  check(S.eligibleRecord(c, 'RESULT', rec, 'GPT'), '両方確認すると使える');
+});
+test('RN-B4 統合の返事でも同じ', () => {
+  const c = newCase();
+  recv(c, R('GPT', 'CASE-T-OBS-GPT')); recv(c, R('Claude Code', 'CASE-T-OBS-ClaudeCode'));
+  S.startSynthesisRequest(c, 'GPT', t());
+  recvRun(c, SYN(c.synthesisReq.task), c.synthesisReq.task, { runnerCheck: 'mismatch' });
+  check(!!c.synthesis && !S.synthesisEligible(c), '統合は採用されるが、確認するまで使えない');
+  S.setConfirmation(c, S.resultAttemptId(c, 'SYN', c.synthesis, null), S.RUNNER_UNVERIFIED, 'confirm', t());
+  check(S.synthesisEligible(c), '確認した後は使える');
+});
+test('RN-B5 実行係を通らない返事（手動・貼り付け）は今までどおり', () => {
+  const c = newCase(), task = 'CASE-T-OBS-GPT';
+  const a = recv(c, R('GPT', task), task);
+  check(!('runner' in a) && !('runnerCheck' in a), '項目を足さない');
+  check(S.eligibleRecord(c, 'RESULT', c.tasks.GPT.result, 'GPT'), '利用可能');
+});
+
   return results;
 }

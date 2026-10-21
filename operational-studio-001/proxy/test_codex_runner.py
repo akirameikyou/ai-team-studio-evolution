@@ -1,38 +1,52 @@
-import json, os, sys, tempfile, unittest
+import hashlib, json, os, sys, tempfile, unittest
 from pathlib import Path
+from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import codex_runner as R
 
 FAKE = R.find_codex(str(HERE / 'fake_codex.py'))
+sha = lambda b: hashlib.sha256(b).hexdigest()
 
 
-def packet(task):
-    return f'[AI TEAM STUDIO｜観測依頼]  CASE: CASE-X  TASK: {task}  TO: Codex\n\n■ 問い\n日本語の問い\r\n改行も保つ\n'
+def packet(task, case='CASE-X', to='Codex'):
+    # The last block of a real request repeats TASK (a template for the reply): only the header line counts (R3).
+    return (f'[AI TEAM STUDIO｜観測依頼]  CASE: {case}  TASK: {task}  TO: {to}\n\n■ 問い\n日本語の問い\r\n改行も保つ\n\n'
+            f'[STUDIO_RESULT]\nCASE: {case}\nTASK: {task}\nFROM: Codex\n[/STUDIO_RESULT]\n')
 
 
 class RunnerTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(); self.ex = Path(self.tmp.name) / 'exchange'
-        self.rec = Path(self.tmp.name) / 'calls.jsonl'
-        os.environ['FAKE_RECORD'] = str(self.rec); os.environ['FAKE_MODE'] = 'ok'
-        os.environ['FAKE_REPLY'] = '[STUDIO_RESULT]\nTASK: CASE-X-OBS-Codex\n本文\n[/STUDIO_RESULT]'
+        self.rec = Path(self.tmp.name) / 'calls.jsonl'          # written by fake_codex.py in its -C folder
+        self.reply = '[STUDIO_RESULT]\nTASK: CASE-X-OBS-Codex\n本文\n[/STUDIO_RESULT]'
+        self.fake('ok')
 
     def tearDown(self):
         self.tmp.cleanup()
 
+    def fake(self, mode, occupy=()):
+        (Path(self.tmp.name) / 'fake.json').write_text(json.dumps({'mode': mode, 'reply': self.reply, 'occupy': list(occupy)}), encoding='utf-8')
+
     def task(self, name, text=None, case='CASE-X'):
         d = self.ex / case / name; d.mkdir(parents=True)
-        (d / 'to-Codex.md').write_bytes((text if text is not None else packet(name)).encode('utf-8'))
+        (d / 'to-Codex.md').write_bytes((text if text is not None else packet(name, case)).encode('utf-8'))
         return d
 
     def calls(self):
         return [json.loads(l) for l in self.rec.read_text(encoding='utf-8').splitlines()] if self.rec.exists() else []
 
-    def run_(self, d, timeout=60):
-        return R.run_task(d, FAKE, self.ex.parent, timeout)
+    def run_(self, d, timeout=60, **kw):
+        return R.run_task(d, FAKE, self.ex.parent, timeout, **kw)
 
+    def claim(self, d):
+        return json.loads((d / R.CLAIM).read_text(encoding='utf-8'))
+
+    def log(self, d):
+        return (d / R.LOG).read_text(encoding='utf-8')
+
+    # --- choosing tasks ---
     def test_only_waiting_observation_and_synthesis_tasks_are_picked(self):
         obs, syn, syn2 = self.task('CASE-X-OBS-Codex'), self.task('CASE-X-SYN'), self.task('CASE-X-SYN-2')
         self.task('CASE-X-NEXT'); self.task('CASE-X-IMPL-Codex'); self.task('CASE-X-OBS-Codex', case='_inbox')
@@ -40,29 +54,21 @@ class RunnerTest(unittest.TestCase):
         claimed = self.task('CASE-Z-OBS-Codex', case='CASE-Z'); (claimed / R.CLAIM).write_text('{}')
         self.assertEqual(set(R.waiting_tasks(self.ex)), {obs, syn, syn2})
 
-    def claim(self, d):
-        return json.loads((d / R.CLAIM).read_text(encoding='utf-8'))
-
-    def test_reply_is_published_byte_for_byte_and_the_claim_records_the_run(self):
+    # --- publishing (R1, R2, S1) ---
+    def test_reply_is_published_byte_for_byte_and_the_claim_records_the_run_and_its_hash(self):
         d = self.task('CASE-X-OBS-Codex')
         self.assertEqual(self.run_(d), 'published')
-        self.assertEqual((d / 'from-Codex.md').read_bytes(), os.environ['FAKE_REPLY'].encode('utf-8'))
+        body = (d / 'from-Codex.md').read_bytes()
+        self.assertEqual(body, self.reply.encode('utf-8'))
         self.assertFalse((d / R.TMP).exists())
         c = self.claim(d)
         self.assertEqual(c['state'], 'done'); self.assertIn('since', c); self.assertIsInstance(c['seconds'], int)
+        self.assertEqual(c['replySha256'], sha(body))                                  # S1-1
         self.assertEqual(c['condition'], {'route': 'runner', 'runner': R.RUNNER_VERSION, 'preamble': R.PREAMBLE_VERSION,
-                                          'codex': 'fake-codex 0.0', 'sandbox': 'read-only', 'effort': 'default'})
-        self.assertIn('from-Codex.md を書きました', (d / R.LOG).read_text(encoding='utf-8'))
+                                          'codex': 'fake-codex 0.0', 'sandbox': 'read-only', 'effort': 'default',
+                                          'modelReported': 'fake-model', 'effortReported': 'none'})
+        self.assertIn('from-Codex.md を書きました', self.log(d))
         self.assertNotIn(d, R.waiting_tasks(self.ex))          # a done folder is never run again
-
-    def test_effort_is_passed_to_codex_and_recorded(self):
-        d = self.task('CASE-X-OBS-Codex')
-        R.run_task(d, FAKE, self.ex.parent, 60, effort='medium')
-        (c,) = self.calls()
-        self.assertIn('model_reasoning_effort="medium"', c['args'])
-        self.assertEqual(self.claim(d)['condition']['effort'], 'medium')
-        d2 = self.task('CASE-Y-OBS-Codex', case='CASE-Y'); self.run_(d2)
-        self.assertFalse(any('model_reasoning_effort' in x for x in self.calls()[1]['args']))   # no effort: Codex's own default
 
     def test_codex_runs_read_only_ephemeral_without_approvals_and_gets_the_exact_request(self):
         d = self.task('CASE-X-OBS-Codex'); self.run_(d)
@@ -73,28 +79,45 @@ class RunnerTest(unittest.TestCase):
         self.assertEqual(a[-1], '-'); self.assertNotIn('--dangerously-bypass-approvals-and-sandbox', a)
         self.assertEqual(c['stdin'], R.PREAMBLE + packet('CASE-X-OBS-Codex') + R.POSTAMBLE)   # CRLF inside kept
 
-    def test_request_for_another_task_is_not_sent(self):
-        d = self.task('CASE-X-OBS-Codex', text=packet('CASE-X-SYN'))
-        self.assertEqual(self.run_(d), 'failed'); self.assertEqual(self.calls(), [])
-        self.assertFalse((d / 'from-Codex.md').exists())
-        self.assertEqual(json.loads((d / R.CLAIM).read_text(encoding='utf-8'))['state'], 'failed')
-
-    def test_failure_empty_reply_and_timeout_publish_nothing_and_leave_a_failed_claim(self):
-        for mode, timeout in (('fail', 60), ('empty', 60), ('slow', 2)):
-            with self.subTest(mode=mode):
-                os.environ['FAKE_MODE'] = mode
-                d = self.task('CASE-X-OBS-Codex', case='CASE-' + mode)
-                self.assertEqual(self.run_(d, timeout), 'failed')
-                self.assertFalse((d / 'from-Codex.md').exists()); self.assertFalse((d / R.TMP).exists())
-                self.assertEqual(json.loads((d / R.CLAIM).read_text(encoding='utf-8'))['state'], 'failed')
-                self.assertNotIn(d, R.waiting_tasks(self.ex))     # a person looks before it runs again
-
     def test_a_reply_a_person_wrote_first_is_never_overwritten(self):
-        os.environ['FAKE_MODE'] = 'person-first'
+        self.fake('person-first')
         d = self.task('CASE-X-OBS-Codex')
         self.assertEqual(self.run_(d), 'conflict')
         self.assertEqual((d / 'from-Codex.md').read_text(encoding='utf-8'), '人が書いた返事')
         self.assertEqual((d / R.CONFLICT).read_text(encoding='utf-8'), 'runner reply')
+        c = self.claim(d)                                                                 # S1-3
+        self.assertEqual(c['state'], 'conflict'); self.assertEqual(c['saved'], R.CONFLICT)
+        self.assertEqual(c['savedSha256'], sha(b'runner reply')); self.assertNotIn('replySha256', c)
+        self.assertFalse((d / R.TMP).exists())
+
+    def test_r1_conflict_files_are_never_overwritten_either(self):
+        self.fake('person-first', occupy=[R.CONFLICT, 'from-Codex.runner-2.md'])
+        d = self.task('CASE-X-OBS-Codex')
+        self.assertEqual(self.run_(d), 'conflict')
+        self.assertEqual((d / R.CONFLICT).read_text(encoding='utf-8'), '先にあった退避ファイル ' + R.CONFLICT)
+        self.assertEqual((d / 'from-Codex.runner-2.md').read_text(encoding='utf-8'), '先にあった退避ファイル from-Codex.runner-2.md')
+        self.assertEqual((d / 'from-Codex.runner-3.md').read_text(encoding='utf-8'), 'runner reply')
+        self.assertEqual(self.claim(d)['saved'], 'from-Codex.runner-3.md')
+        self.assertFalse((d / R.TMP).exists())
+
+    def test_r1_an_unexpected_error_while_publishing_leaves_a_failed_claim_no_temp_and_the_log(self):
+        d = self.task('CASE-X-OBS-Codex')
+        with mock.patch.object(R.os, 'link', side_effect=PermissionError('locked')):
+            self.assertEqual(self.run_(d), 'failed')
+        c = self.claim(d)                                                                 # S1-2, S1-4
+        self.assertEqual(c['state'], 'failed'); self.assertIn('PermissionError', c['reason'])
+        self.assertFalse((d / 'from-Codex.md').exists()); self.assertFalse((d / R.TMP).exists())
+        self.assertIn('PermissionError', self.log(d))
+
+    def test_failure_empty_reply_and_timeout_publish_nothing_and_leave_a_failed_claim(self):
+        for mode, timeout in (('fail', 60), ('empty', 60), ('slow', 2)):
+            with self.subTest(mode=mode):
+                self.fake(mode)
+                d = self.task('CASE-X-OBS-Codex', case='CASE-' + mode)
+                self.assertEqual(self.run_(d, timeout), 'failed')
+                self.assertFalse((d / 'from-Codex.md').exists()); self.assertFalse((d / R.TMP).exists())
+                self.assertEqual(self.claim(d)['state'], 'failed')
+                self.assertNotIn(d, R.waiting_tasks(self.ex))     # a person looks before it runs again
 
     def test_a_claimed_folder_is_not_run_twice(self):
         d = self.task('CASE-X-OBS-Codex'); (d / R.CLAIM).write_text('{"state":"running"}')
@@ -105,11 +128,95 @@ class RunnerTest(unittest.TestCase):
         self.assertEqual(R.run_task(d, FAKE, self.ex.parent, 60, dry_run=True), 'dry-run')
         self.assertEqual(self.calls(), []); self.assertFalse((d / R.CLAIM).exists())
 
+    # --- the request must name this folder (R3) ---
+    def test_r3_header_case_task_and_to_must_match_the_folder(self):
+        def bad(c, t):
+            return {'TASK of another folder': packet(c + '-SYN', c), 'CASE of another folder': packet(t, 'CASE-Q'),
+                    'TO someone else': packet(t, c, to='GPT'),
+                    'two TASK in the header': f'[AI TEAM STUDIO｜観測依頼]  CASE: {c}  TASK: {t}  TASK: {t}  TO: Codex\n本文\n',
+                    'no TO in the header': f'[AI TEAM STUDIO｜観測依頼]  CASE: {c}  TASK: {t}\nTO: Codex\n',
+                    'header not on the first line': f'本文だけ\nCASE: {c}  TASK: {t}  TO: Codex\n'}
+        for i, why in enumerate(bad('C', 'T')):
+            with self.subTest(why=why):
+                c = f'C{i}'; t = c + '-OBS-Codex'
+                d = self.task(t, text=bad(c, t)[why], case=c)
+                self.assertEqual(self.run_(d), 'failed', why)
+                self.assertEqual(self.claim(d)['state'], 'failed')
+        self.assertEqual(self.calls(), [])
+
+    def test_r3_the_reply_template_in_the_body_does_not_count(self):
+        d = self.task('CASE-X-OBS-Codex')                       # packet() repeats TASK in the body
+        self.assertEqual(self.run_(d), 'published')
+
+    def test_r3_task_option_accepts_only_a_folder_inside_the_exchange(self):
+        inside = self.task('CASE-X-OBS-Codex')
+        outside = Path(self.tmp.name) / 'elsewhere' / 'CASE-X' / 'CASE-X-OBS-Codex'; outside.mkdir(parents=True)
+        (outside / 'to-Codex.md').write_bytes(packet('CASE-X-OBS-Codex').encode('utf-8'))
+        self.assertIsNone(R.task_problem(inside, self.ex))
+        self.assertIsNotNone(R.task_problem(outside, self.ex))
+        self.assertIsNotNone(R.task_problem(self.ex / 'CASE-X', self.ex))                   # not <CASE>/<TASK>
+        with self.assertRaises(SystemExit):
+            R.main(['--codex', str(HERE / 'fake_codex.py'), '--exchange', str(self.ex), '--task', str(outside)])
+        self.assertEqual(self.calls(), []); self.assertFalse((outside / R.CLAIM).exists())
+
+    def test_r3_a_link_on_the_way_is_refused(self):
+        inside = self.task('CASE-X-OBS-Codex')
+        real = Path.is_symlink
+        with mock.patch.object(Path, 'is_symlink', lambda p: p.name == 'CASE-X' or real(p)):
+            self.assertIsNotNone(R.task_problem(inside, self.ex))
+
     def test_execution_tasks_are_refused_by_task_option(self):
         d = self.task('CASE-X-NEXT')
         with self.assertRaises(SystemExit):
             R.main(['--codex', str(HERE / 'fake_codex.py'), '--exchange', str(self.ex), '--task', str(d)])
         self.assertEqual(self.calls(), [])
+
+    # --- effort (R4) and the record of the run (R5) ---
+    def test_r4_effort_is_passed_and_recorded_only_for_known_values(self):
+        d = self.task('CASE-X-OBS-Codex')
+        R.run_task(d, FAKE, self.ex.parent, 60, effort='medium')
+        (c,) = self.calls()
+        self.assertIn('model_reasoning_effort="medium"', c['args'])
+        cond = self.claim(d)['condition']
+        self.assertEqual(cond['effort'], 'medium'); self.assertEqual(cond['effortReported'], 'medium')
+        d2 = self.task('CASE-Y-OBS-Codex', case='CASE-Y'); self.run_(d2)
+        self.assertFalse(any('model_reasoning_effort' in x for x in self.calls()[1]['args']))   # no effort: Codex's own default
+        for ok in R.EFFORTS:
+            self.assertIsNone(R.effort_problem(ok))
+        d3 = self.task('CASE-Z-OBS-Codex', case='CASE-Z')
+        for bad in ('High', 'high"', 'a=b', '', 'ultra', 'none'):
+            self.assertIsNotNone(R.effort_problem(bad), bad)
+            with self.assertRaises(SystemExit):
+                R.main(['--codex', str(HERE / 'fake_codex.py'), '--exchange', str(self.ex), '--effort', bad, '--task', str(d3)])
+        self.assertEqual(len(self.calls()), 2); self.assertFalse((d3 / R.CLAIM).exists())
+
+    def test_r5_the_log_keeps_the_header_and_never_the_request(self):
+        d = self.task('CASE-X-OBS-Codex'); self.run_(d, effort='high')
+        log = self.log(d)
+        for line in ('model: fake-model', 'reasoning effort: high', 'sandbox: read-only', 'approval: never'):
+            self.assertIn(line, log)
+        self.assertIn('exit 0', log); self.assertIn('exec --ephemeral', log)
+        self.assertNotIn('日本語の問い', log); self.assertNotIn(R.PREAMBLE.splitlines()[0], log)   # the request is not logged
+        self.assertNotIn('session id', log)
+
+    def test_r5_a_failure_logs_error_lines_but_not_the_request(self):
+        self.fake('fail')
+        d = self.task('CASE-X-OBS-Codex'); self.run_(d)
+        log = self.log(d)
+        self.assertIn('ERROR: fake failure', log); self.assertNotIn('日本語の問い', log)
+
+    # --- environment (R6) ---
+    def test_r6_codex_gets_only_the_allowed_environment(self):
+        d = self.task('CASE-X-OBS-Codex')
+        with mock.patch.dict(os.environ, {'GEMINI_API_KEY': 'dummy', 'OPENAI_API_KEY': 'dummy', 'ATS_CANARY': 'dummy'}):
+            self.run_(d)
+        env = {k.upper() for k in self.calls()[0]['env']}
+        for secret in ('GEMINI_API_KEY', 'OPENAI_API_KEY', 'ATS_CANARY'):
+            self.assertNotIn(secret, env)
+        self.assertIn('SYSTEMROOT', env); self.assertIn('USERPROFILE', env)
+        # Python itself may add a few variables to its own environment (for example on Windows); none of them is a secret.
+        extra = env - {k.upper() for k in R.ENV_ALLOW}
+        self.assertFalse({k for k in extra if 'KEY' in k or 'TOKEN' in k or 'SECRET' in k}, extra)
 
 
 if __name__ == '__main__':

@@ -63,11 +63,20 @@ def snapshot_problem(text):
 MAX_RUNNER_CLAIM = 4096
 RUNNER_STATES = ('queued', 'running', 'done', 'failed', 'conflict')
 RUNNER_TEXT_FIELDS = ('since', 'at', 'reason')
-RUNNER_CONDITION_FIELDS = ('route', 'runner', 'preamble', 'codex', 'sandbox', 'effort')
+RUNNER_CONDITION_FIELDS = ('route', 'runner', 'preamble', 'codex', 'sandbox', 'effort', 'modelReported', 'effortReported')
+SHA256_HEX = re.compile(r'^[0-9a-f]{64}$')
+
+
+def runner_check(recorded, data):
+    """3-1-r2 R2: does the reply file (its bytes, before any newline conversion) equal what the runner published?"""
+    if not isinstance(recorded, str) or not SHA256_HEX.match(recorded):
+        return 'unverifiable'
+    return 'match' if hashlib.sha256(data).hexdigest() == recorded else 'mismatch'
 
 
 def runner_state(task_dir, to):
-    """None when there is no claim file; {'state': 'unknown'} when there is one that cannot be used as it is."""
+    """None when there is no claim file; {'state': 'unknown'} when there is one that cannot be used as it is.
+    A done claim also carries the recorded reply hash under '_replySha256', for /result to compare and drop."""
     p = task_dir / f'.{to.lower()}-run'
     if not p.exists() and not p.is_symlink():
         return None
@@ -88,6 +97,8 @@ def runner_state(task_dir, to):
     cond = o.get('condition')
     if isinstance(cond, dict):
         out['condition'] = {k: cond[k][:100] for k in RUNNER_CONDITION_FIELDS if isinstance(cond.get(k), str)}
+    if out['state'] == 'done':
+        out['_replySha256'] = o.get('replySha256')
     return out
 
 
@@ -249,6 +260,7 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == '/result':
                 d, to = EXCHANGE / safe(q['case']) / safe(q['task']), safe(q['to'])
                 p, run = d / f'from-{to}.md', runner_state(d, to)
+                recorded = run.pop('_replySha256', None) if run else None
                 extra = {'runner': run} if run else {}
                 if not p.exists():
                     return self.reply(200, {'pending': True, **extra})  # 200, not 404: polling is normal and should not log errors
@@ -256,8 +268,13 @@ class Handler(BaseHTTPRequestHandler):
                 # (StudioText.agentInstruction). Files changed within the last SETTLE_SECONDS (inclusive) wait.
                 if time.time() - p.stat().st_mtime <= SETTLE_SECONDS:
                     return self.reply(200, {'pending': True, 'settling': True, **extra})  # possibly half-written by an agent
-                # Read with universal newlines: a reply written with CRLF reaches the Studio with LF (by design).
-                return self.reply(200, {'text': p.read_text(encoding='utf-8'), **extra})
+                # One read: the hash compared with the runner's record (R2) and the text come from the same bytes.
+                data = p.read_bytes()
+                if run and run['state'] == 'done':
+                    run['check'] = runner_check(recorded, data)
+                # Universal newlines, as read_text did: a reply written with CRLF reaches the Studio with LF (by design).
+                text = data.decode('utf-8').replace('\r\n', '\n').replace('\r', '\n')
+                return self.reply(200, {'text': text, **extra})
             if u.path == '/hash':
                 url = q.get('url', '')
                 if not re.match(r'^https?://', url):

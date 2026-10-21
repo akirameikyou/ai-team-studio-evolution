@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""AI Team Studio — Codex runner (stage 3-1: the relay shows its state; a person or Claude still starts it).
+"""AI Team Studio — Codex runner (stage 3-1-r2: the relay shows its state; a person or Claude still starts it).
 
 What it does, per task folder exchange/<CASE>/<TASK>/:
   1. picks folders that have to-Codex.md, no from-Codex.md and no claim file .codex-run
      (only observation and synthesis tasks; execution tasks stay manual)
   2. claims the folder by creating .codex-run exclusively (no double runs)
-  3. runs `codex exec` read-only with the request on stdin; Codex writes no files
-  4. the runner writes the reply to a temporary file and renames it to from-Codex.md.
-     os.rename never replaces an existing file on Windows, so a reply a person wrote first is kept.
-The claim stays after the run: state done / failed / conflict, with the conditions of the run. The relay returns it
-with GET /result (read only), so the Studio can show the state and record the conditions with the reply.
+  3. checks that the request's header line names this folder (CASE, TASK) and Codex (TO)
+  4. runs `codex exec` read-only with the request on stdin and a minimal environment; Codex writes no files
+  5. the runner writes the reply to a temporary file and links it to from-Codex.md (a link never replaces an existing
+     file), so a reply a person wrote first is kept; the runner's reply then goes to from-Codex.runner[-n].md.
+The claim stays after the run: state done / failed / conflict, the SHA-256 of the published bytes and the conditions
+of the run. The relay returns it with GET /result (read only), so the Studio can show the state and record the
+conditions only when the reply it collected is the one the runner published.
 
 Run:  python codex_runner.py --dry-run              list what would run, send nothing
       python codex_runner.py --task <task folder>   run one task (recommended)
@@ -17,21 +19,33 @@ Run:  python codex_runner.py --dry-run              list what would run, send no
       python codex_runner.py --watch 30             look every 30 s; stops when exchange/_runner_STOP exists
 Sign-in: Codex's own (codex login). The runner never reads auth.json or proxy/.env.
 """
-import argparse, glob, json, os, re, subprocess, sys, time
+import argparse, glob, hashlib, json, os, re, subprocess, sys, time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_EXCHANGE = HERE / 'exchange'
 DEFAULT_REPO = HERE.parent.parent          # the repository root: Codex reads the code it is asked about from here
-RUNNER_VERSION = 'codex_runner 0.2'
+RUNNER_VERSION = 'codex_runner 0.3'
 PREAMBLE_VERSION = 'P1'                    # change this name whenever PREAMBLE changes (it is recorded as a condition)
 AI = 'Codex'
 CLAIM, LOG = '.codex-run', 'codex-run.log'
 TMP = '.from-Codex.md.runner.tmp'       # not the name Codex Desktop is asked to use, so the two never share a file
-CONFLICT = 'from-Codex.runner.md'       # where the reply goes when a person wrote from-Codex.md first
+CONFLICT = 'from-Codex.runner.md'       # where the reply goes when a person wrote from-Codex.md first (then -2, -3 …)
+MAX_CONFLICT = 99
 STOP = '_runner_STOP'
 # Observation (<CASE>-OBS-Codex[-n]) and synthesis (<CASE>-SYN[-n]) only. NEXT / IMPL need writes: manual for now.
 AUTO_TASK = re.compile(r'-(OBS-Codex|SYN)(-\d+)?$')
+# R4: the reasoning levels the current Codex models list (models_cache.json supported_reasoning_levels).
+EFFORTS = ('low', 'medium', 'high', 'xhigh', 'max')
+# R6: Codex gets only these variables. Keys and tokens loaded by whoever started the runner (the relay's .env, for
+# example) never reach it. Sign-in is found through USERPROFILE / CODEX_HOME.
+ENV_ALLOW = ('SYSTEMROOT', 'WINDIR', 'SYSTEMDRIVE', 'COMSPEC', 'PATH', 'PATHEXT', 'TEMP', 'TMP', 'USERPROFILE',
+             'LOCALAPPDATA', 'APPDATA', 'HOMEDRIVE', 'HOMEPATH', 'COMPUTERNAME', 'USERNAME', 'USERDOMAIN',
+             'PROGRAMDATA', 'PROGRAMFILES', 'PROGRAMFILES(X86)', 'COMMONPROGRAMFILES', 'ALLUSERSPROFILE', 'OS',
+             'PROCESSOR_ARCHITECTURE', 'NUMBER_OF_PROCESSORS', 'PSMODULEPATH', 'CODEX_HOME')
+# R5: the only stderr lines kept (from Codex's header). Everything after the header repeats the request: never logged.
+HEADER_KEYS = ('model', 'reasoning effort', 'sandbox', 'approval')
+HEADER_FIELD = re.compile(r'\b(CASE|TASK|TO):\s*(\S+)')
 PREAMBLE = ('以下は AI Team Studio からの依頼文です（実行係 codex_runner.py が渡しています）。\n'
             'ファイルは作成・変更・削除しないでください。依頼文が「結果ファイルを書く」よう求めていても、書かないでください。\n'
             '返事は、依頼文が求める本文（最後のブロックを含む）だけを、最後のメッセージとして返してください。'
@@ -45,6 +59,10 @@ def now():
     return time.strftime('%Y-%m-%dT%H:%M:%S')
 
 
+def sha256(b):
+    return hashlib.sha256(b).hexdigest()
+
+
 def find_codex(given=None):
     """--codex, then CODEX_EXE, then the newest %LOCALAPPDATA%\\OpenAI\\Codex\\bin\\*\\codex.exe (the folder name changes on updates)."""
     p = given or os.environ.get('CODEX_EXE')
@@ -56,6 +74,12 @@ def find_codex(given=None):
     return [sys.executable, p] if p.endswith('.py') else [p]   # .py = a stand-in used by the tests
 
 
+def codex_env():
+    """R6: the environment Codex is started with (an allow-list, compared without case as Windows does)."""
+    allow = {k.upper() for k in ENV_ALLOW}
+    return {k: v for k, v in os.environ.items() if k.upper() in allow}
+
+
 _VERSIONS = {}
 
 
@@ -63,23 +87,50 @@ def codex_version(codex):
     key = tuple(codex)
     if key not in _VERSIONS:
         try:
-            p = subprocess.run(codex + ['--version'], capture_output=True, timeout=30)
+            p = subprocess.run(codex + ['--version'], capture_output=True, timeout=30, env=codex_env())
             _VERSIONS[key] = p.stdout.decode('utf-8', errors='replace').strip()[:80] or 'unknown'
         except (OSError, subprocess.TimeoutExpired):
             _VERSIONS[key] = 'unknown'
     return _VERSIONS[key]
 
 
+def effort_problem(effort):
+    return None if effort in EFFORTS else f'推論の強さは {"・".join(EFFORTS)} のどれかです（指定：{effort!r}）'
+
+
 def codex_args(codex, repo, out, effort=None):
-    extra = ['-c', f'model_reasoning_effort="{effort}"'] if effort else []
+    extra = ['-c', f'model_reasoning_effort="{effort}"'] if effort else []   # effort is one of EFFORTS (R4)
     return codex + ['exec', '--ephemeral', '-s', 'read-only', '-c', 'approval_policy="never"', *extra,
                     '-C', str(repo), '-o', str(out), '-']
 
 
-def condition(codex, effort):
+def header_lines(stderr):
+    """R5: Codex's header (between the first two '--------' lines), only the HEADER_KEYS lines."""
+    lines, inside, seps = [], False, 0
+    for line in stderr.splitlines():
+        if line.strip() == '--------':
+            seps += 1
+            inside = seps == 1
+            if seps >= 2:
+                break
+            continue
+        if inside and line.split(':', 1)[0].strip() in HEADER_KEYS:
+            lines.append(line.strip()[:200])
+    return lines
+
+
+def error_lines(stderr):
+    """On failure: lines Codex marks as errors (never the request, which Codex repeats after its header)."""
+    return [l.strip()[:300] for l in stderr.splitlines() if re.match(r'^\s*(ERROR|error)\b', l)][:5]
+
+
+def condition(codex, effort, header=()):
     """The conditions of this run, recorded with the reply (who carried it and how)."""
+    h = dict(l.split(':', 1) for l in header)
     return {'route': 'runner', 'runner': RUNNER_VERSION, 'preamble': PREAMBLE_VERSION, 'codex': codex_version(codex),
-            'sandbox': 'read-only', 'effort': effort or 'default'}
+            'sandbox': 'read-only', 'effort': effort or 'default',
+            'modelReported': h.get('model', '').strip()[:100] or 'unknown',
+            'effortReported': h.get('reasoning effort', '').strip()[:100] or 'unknown'}
 
 
 def waiting_tasks(exchange):
@@ -92,14 +143,38 @@ def waiting_tasks(exchange):
     return out
 
 
+def task_problem(task_dir, exchange):
+    """R3: None if task_dir is exchange/<CASE>/<TASK> itself, with no link on the way."""
+    task_dir, exchange = Path(task_dir), Path(exchange)
+    if any(p.is_symlink() for p in (task_dir, task_dir.parent)):
+        return 'フォルダの途中にリンクがあります'
+    try:
+        real, ex = task_dir.resolve(strict=True), exchange.resolve(strict=True)
+    except OSError:
+        return 'フォルダがありません'
+    if os.path.normcase(os.path.abspath(task_dir)) != os.path.normcase(str(real)):
+        return 'フォルダの途中にリンクがあります'
+    if real.parent.parent != ex:
+        return f'受け渡しフォルダ（{ex}）の中の <CASE>/<TASK> ではありません'
+    return None
+
+
 def request_problem(task_dir, packet):
-    """None if the request names this folder's task, else why it must not be sent (the agent instruction says the same)."""
-    head = packet.decode('utf-8', errors='replace')[:2000]
-    m = re.search(r'TASK:\s*(\S+)', head)
-    if not m:
-        return '依頼文に TASK がありません'
-    if m.group(1) != task_dir.name:
-        return f'依頼文の TASK（{m.group(1)}）がフォルダ名（{task_dir.name}）と合いません'
+    """R3: None if the request's header (its first non-empty line) names this folder's CASE and TASK, and Codex, once
+    each. The body is not read: the reply template at its end repeats TASK, as it should."""
+    text = packet.decode('utf-8', errors='replace')
+    head = next((l for l in text.splitlines() if l.strip()), '')
+    found = HEADER_FIELD.findall(head)
+    keys = [k for k, _ in found]
+    if sorted(keys) != ['CASE', 'TASK', 'TO']:
+        return '依頼文の見出し（1行目）に CASE・TASK・TO が1つずつありません'
+    f = dict(found)
+    if f['TASK'] != task_dir.name:
+        return f'依頼文の TASK（{f["TASK"]}）がフォルダ名（{task_dir.name}）と合いません'
+    if f['CASE'] != task_dir.parent.name:
+        return f'依頼文の CASE（{f["CASE"]}）が Case のフォルダ名（{task_dir.parent.name}）と合いません'
+    if f['TO'] != AI:
+        return f'依頼文の宛先（{f["TO"]}）が {AI} ではありません'
     return None
 
 
@@ -112,6 +187,12 @@ def log(task_dir, text):
         f.write(f'[{now()}] {text}\n')
 
 
+def publish(tmp, dest):
+    """R1: give tmp the name dest only if dest does not exist yet (a hard link never replaces a file), then drop tmp."""
+    os.link(tmp, dest)
+    os.unlink(tmp)
+
+
 def run_task(task_dir, codex, repo, timeout, dry_run=False, effort=None):
     """Returns 'published' | 'conflict' | 'failed' | 'skipped' | 'dry-run'."""
     task_dir = Path(task_dir)
@@ -122,7 +203,7 @@ def run_task(task_dir, codex, repo, timeout, dry_run=False, effort=None):
     problem = request_problem(task_dir, packet)
     args = codex_args(codex, repo, tmp, effort)
     if dry_run:
-        print(f'{task_dir}\n  依頼 {len(packet)} バイト / {problem or "TASK 一致"}\n  {subprocess.list2cmdline(args)}')
+        print(f'{task_dir}\n  依頼 {len(packet)} バイト / {problem or "見出しが一致"}\n  {subprocess.list2cmdline(args)}')
         return 'dry-run'
     try:   # exclusive claim: a second runner (or a second click) on the same folder stops here
         fd = os.open(task_dir / CLAIM, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
@@ -133,39 +214,64 @@ def run_task(task_dir, codex, repo, timeout, dry_run=False, effort=None):
     if problem:
         write_claim(task_dir, 'failed', since=since, reason=problem); log(task_dir, '送らずに止めました: ' + problem)
         return 'failed'
+    try:
+        return _run_claimed(task_dir, codex, args, packet, since, timeout, effort, from_file, tmp)
+    except Exception as e:   # S1-4: whatever happens, the claim does not stay "running" and no temporary file is left
+        reason = f'{type(e).__name__}: {str(e)[:150]}'
+        write_claim(task_dir, 'failed', since=since, reason=reason)
+        log(task_dir, '失敗（予期しないエラー）: ' + reason)
+        if tmp.exists():
+            tmp.unlink()
+        return 'failed'
+
+
+def _run_claimed(task_dir, codex, args, packet, since, timeout, effort, from_file, tmp):
     cond = condition(codex, effort)
     write_claim(task_dir, 'running', since=since, pid=os.getpid(), condition=cond)
     if tmp.exists():
         tmp.unlink()
-    started = time.time()
+    started, timed_out = time.time(), False
     try:
         p = subprocess.run(args, input=PREAMBLE.encode('utf-8') + packet + POSTAMBLE.encode('utf-8'),
-                           capture_output=True, timeout=timeout)
+                           capture_output=True, timeout=timeout, env=codex_env())
         code, err = p.returncode, p.stderr.decode('utf-8', errors='replace')
-    except subprocess.TimeoutExpired:
-        code, err = None, f'時間切れ（{timeout} 秒）'
+    except subprocess.TimeoutExpired as e:
+        code, err, timed_out = None, (e.stderr or b'').decode('utf-8', errors='replace'), True
     secs = int(time.time() - started)
-    tail = '\n'.join(err.splitlines()[-15:])
+    header = header_lines(err)
+    cond = condition(codex, effort, header)
+    log(task_dir, f'実行 {subprocess.list2cmdline(args[len(codex):])}\n'
+                  f'  開始 {since} / {secs} 秒 / exit {code if code is not None else "-"}{" / 時間切れ" if timed_out else ""}\n'
+                  + ''.join(f'  {l}\n' for l in header))
     reply = tmp.read_bytes() if tmp.exists() else b''
     if code != 0 or not reply.strip():
-        reason = f'時間切れ（{timeout} 秒）' if code is None else (f'終了コード {code}' if code != 0 else '返事が空')
+        reason = f'時間切れ（{timeout} 秒）' if timed_out else (f'終了コード {code}' if code != 0 else '返事が空')
         write_claim(task_dir, 'failed', since=since, reason=reason, seconds=secs, condition=cond)
-        log(task_dir, f'失敗: {reason}（{secs} 秒）\n{tail}')
+        log(task_dir, f'失敗: {reason}（{secs} 秒）' + ''.join(f'\n  {l}' for l in error_lines(err)))
         if tmp.exists():
             tmp.unlink()
         return 'failed'
+    digest = sha256(reply)
     note = '' if re.search(r'TASK:\s*' + re.escape(task_dir.name) + r'\s', reply.decode('utf-8', errors='replace')) \
         else '（注意: 返事に TASK の一致する行がありません。判定はスタジオに任せます）'
     try:
-        os.rename(tmp, from_file)          # fails if from-Codex.md appeared meanwhile: never overwrite a person's reply
+        publish(tmp, from_file)          # fails if from-Codex.md appeared meanwhile: never overwrite a person's reply
     except FileExistsError:
-        os.rename(tmp, task_dir / CONFLICT)
-        write_claim(task_dir, 'conflict', since=since, seconds=secs, saved=CONFLICT, condition=cond,
-                    reason=f'from-{AI}.md が先にありました。実行係の返事は {CONFLICT} にあります')
-        log(task_dir, f'from-{AI}.md が先にあったので、返事は {CONFLICT} に置きました（{secs} 秒）')
+        for k in range(1, MAX_CONFLICT + 1):
+            name = CONFLICT if k == 1 else f'from-{AI}.runner-{k}.md'
+            try:
+                publish(tmp, task_dir / name)
+                break
+            except FileExistsError:
+                continue
+        else:
+            raise OSError(f'退避先を作れません（{CONFLICT} から -{MAX_CONFLICT} まで使用中）')
+        write_claim(task_dir, 'conflict', since=since, seconds=secs, saved=name, savedSha256=digest, condition=cond,
+                    reason=f'from-{AI}.md が先にありました。実行係の返事は {name} にあります')
+        log(task_dir, f'from-{AI}.md が先にあったので、返事は {name} に置きました（{secs} 秒）')
         return 'conflict'
-    # The claim stays as a record of the run (done + conditions). The runner skips the folder because from- exists.
-    write_claim(task_dir, 'done', since=since, seconds=secs, condition=cond)
+    # The claim stays as a record of the run (done, the hash of what was published, the conditions).
+    write_claim(task_dir, 'done', since=since, seconds=secs, replySha256=digest, condition=cond)
     log(task_dir, f'from-{AI}.md を書きました（{len(reply)} バイト, {secs} 秒）{note}')
     return 'published'
 
@@ -176,18 +282,23 @@ def main(argv=None):
     ap.add_argument('--repo', default=str(DEFAULT_REPO), help='Codex の作業フォルダ（-C）')
     ap.add_argument('--codex', help='codex.exe のパス')
     ap.add_argument('--timeout', type=int, default=1800)
-    ap.add_argument('--effort', help='推論の強さ（model_reasoning_effort）。省略すると Codex の既定')
+    ap.add_argument('--effort', help='推論の強さ（' + '・'.join(EFFORTS) + '）。省略すると Codex の既定')
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument('--dry-run', action='store_true')
     g.add_argument('--task')
     g.add_argument('--once', action='store_true')
     g.add_argument('--watch', type=int, metavar='SECONDS')
     a = ap.parse_args(argv)
+    if a.effort is not None and effort_problem(a.effort):
+        raise SystemExit(effort_problem(a.effort))
     codex = find_codex(a.codex)
     if a.task:
         task = Path(a.task)
         if not AUTO_TASK.search(task.name):
             raise SystemExit(f'{task.name} は自動の対象外です（観測 -OBS-Codex と統合 -SYN だけ）')
+        problem = task_problem(task, a.exchange)
+        if problem:
+            raise SystemExit(f'{task} は実行しません：{problem}')
         print(run_task(task, codex, a.repo, a.timeout, effort=a.effort))
         return
     while True:
