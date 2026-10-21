@@ -33,6 +33,18 @@ def snapshots_dir():
     return EXCHANGE / '_snapshots'
 
 
+def snapshot_files():
+    """Regular snapshot files directly in the snapshot folder, newest name first. Symbolic links (and anything that
+    resolves outside the folder) are never listed or read."""
+    d = snapshots_dir()
+    if not d.exists():
+        return []
+    root = d.resolve()
+    out = [p for p in d.glob('ats-store-*.json')
+           if SNAPSHOT_NAME.match(p.name) and not p.is_symlink() and p.is_file() and p.resolve().parent == root]
+    return sorted(out, key=lambda p: p.name, reverse=True)
+
+
 def snapshot_problem(text):
     """None if text is a Studio record (the shape app.js load() accepts), else the reason."""
     if not isinstance(text, str):
@@ -182,14 +194,16 @@ class Handler(BaseHTTPRequestHandler):
             if u.path in ('/snapshots', '/snapshot') and not self.local_origin():
                 return self.reply(403, {'error': 'snapshots are for local pages only'})
             if u.path == '/snapshots':
-                files = sorted(snapshots_dir().glob('ats-store-*.json'), key=lambda p: p.name, reverse=True) if snapshots_dir().exists() else []
+                files = snapshot_files()
                 return self.reply(200, {'dir': str(snapshots_dir()), 'snapshots': [
-                    {'name': p.name, 'bytes': p.stat().st_size} for p in files[:50]], 'total': len(files)})
+                    {'name': p.name, 'bytes': p.stat().st_size} for p in files[:50]], 'total': len(files),
+                    'totalBytes': sum(p.stat().st_size for p in files)})
             if u.path == '/snapshot':
                 name = q.get('name', '')
-                if not SNAPSHOT_NAME.match(name) or not (snapshots_dir() / name).is_file():
+                hit = [p for p in snapshot_files() if p.name == name] if SNAPSHOT_NAME.match(name) else []
+                if not hit:
                     return self.reply(404, {'error': 'no such snapshot'})
-                return self.reply(200, {'name': name, 'text': (snapshots_dir() / name).read_bytes().decode('utf-8')})
+                return self.reply(200, {'name': name, 'text': hit[0].read_bytes().decode('utf-8')})
             if u.path == '/case-exists':
                 # 2-B: lets the Studio avoid a Case ID whose folder is already here (read-only; nothing is created).
                 return self.reply(200, {'exists': (EXCHANGE / safe(q['case'])).exists()})
@@ -279,7 +293,9 @@ class Handler(BaseHTTPRequestHandler):
                     name = f'ats-store-{stamp}-r{rev}-{k}.json'
                 write_atomic(snapshots_dir() / name, text)
             data = text.encode('utf-8')
-            return self.reply(200, {'saved': name, 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest()})
+            files = snapshot_files()     # so the Studio can show how much is kept (retention is a human decision)
+            return self.reply(200, {'saved': name, 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest(),
+                                    'count': len(files), 'totalBytes': sum(p.stat().st_size for p in files)})
         except (KeyError, ValueError, TypeError) as e:
             return self.reply(400, {'error': f'bad request: {e}'})
         except Exception as e:

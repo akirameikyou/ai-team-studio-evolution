@@ -58,34 +58,40 @@ function save() {
 // ---------- 2-C: copies of the record in the relay folder ----------
 // After a successful save, and 3 s after the last one, the text actually stored in localStorage (never an unsaved
 // state) is sent to the relay, which keeps every copy as its own file. One copy is in flight at a time; a save during
-// it schedules one more. Nothing is sent while saving is blocked. Failures are shown, never hidden.
+// it queues one more. Nothing is sent while saving is blocked. Failures are shown, never hidden.
+// Copies run strictly one after another (a promise chain); runBackup() resolves with the result of *its own* copy,
+// so a caller that must know whether the current record was kept (restore) waits for exactly that copy.
 const BACKUP_DELAY = 3000;
-const backup = { timer: null, inflight: false, again: false, last: null, error: null };
+const backup = { timer: null, chain: Promise.resolve(), last: null, error: null, count: null, totalBytes: null };
 function scheduleBackup() {
   if (!store.settings.proxyUrl) return renderBackupNote();
   clearTimeout(backup.timer); backup.timer = setTimeout(runBackup, BACKUP_DELAY);
 }
-async function runBackup() {
-  if (saveBlocked || !store.settings.proxyUrl) return renderBackupNote();
-  if (backup.inflight) { backup.again = true; return; }
+function runBackup() {
+  const p = backup.chain.then(copyOnce);
+  backup.chain = p.catch(() => {});
+  return p;
+}
+async function copyOnce() {
+  if (saveBlocked || !store.settings.proxyUrl) { renderBackupNote(); return { ok: false, skipped: true, why: saveBlocked ? '保存が止まっています' : '中継がありません' }; }
   let text = null;
-  try { text = localStorage.getItem(KEY); } catch (e) { backup.error = { at: now(), why: '保存領域を読めません' }; return renderBackupNote(); }
-  if (text == null) return renderBackupNote();
-  backup.inflight = true;
+  try { text = localStorage.getItem(KEY); } catch (e) { backup.error = { at: now(), why: '保存領域を読めません' }; renderBackupNote(); return { ok: false, why: backup.error.why }; }
+  if (text == null) { renderBackupNote(); return { ok: false, skipped: true, why: 'まだ保存された記録がありません' }; }
+  let rev = 0; try { rev = JSON.parse(text).rev || 0; } catch (_) { }      // the revision of the text being sent, not of a later save
   try {
-    const r = await fetch(store.settings.proxyUrl.replace(/\/$/, '') + '/snapshot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rev: store.rev || 0, store: text }) });
+    const r = await fetch(store.settings.proxyUrl.replace(/\/$/, '') + '/snapshot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rev, store: text }) });
     const j = await r.json();
     if (!r.ok || !j.saved) throw new Error(j.error || 'HTTP ' + r.status);
-    backup.last = { at: now(), name: j.saved, rev: store.rev || 0 }; backup.error = null;
-  } catch (e) { backup.error = { at: now(), why: e.message }; }
-  backup.inflight = false;
-  if (backup.again) { backup.again = false; scheduleBackup(); }
-  renderBackupNote();
+    backup.last = { at: now(), name: j.saved, rev }; backup.error = null;
+    if (typeof j.count === 'number') { backup.count = j.count; backup.totalBytes = j.totalBytes; }
+    renderBackupNote(); return { ok: true, name: j.saved };
+  } catch (e) { backup.error = { at: now(), why: e.message }; renderBackupNote(); return { ok: false, why: e.message }; }
 }
 function renderBackupNote() {
   const el = $('backupNote'); if (!el) return;
   el.className = backup.error ? 'ng' : '';
-  el.textContent = !store.settings.proxyUrl ? 'なし（中継なし）' : backup.error ? `失敗 ${hm(backup.error.at)}（${backup.error.why}）` : backup.last ? `${hm(backup.last.at)}（r${backup.last.rev}）` : '中継へ保存します';
+  const size = backup.count != null ? `・写し ${backup.count}件 ${Math.ceil((backup.totalBytes || 0) / 1024)} KB` : '';
+  el.textContent = !store.settings.proxyUrl ? 'なし（中継なし）' : backup.error ? `失敗 ${hm(backup.error.at)}（${backup.error.why}）` : backup.last ? `${hm(backup.last.at)}（r${backup.last.rev}${size}）` : '中継へ保存します';
 }
 async function restoreFromCopy() {
   if (!store.settings.proxyUrl) return tell('記録の写しは中継のフォルダにあります。先に「AIの接続設定」で中継のURLを入れてください。');
@@ -101,12 +107,18 @@ async function restoreFromCopy() {
   if (p.error) return tell('この写しは使えません：' + p.error);
   const nowCount = Object.keys(store.cases).length, newCount = Object.keys(p.store.cases).length;
   if (!(await ask(`今の記録（Case ${nowCount}件）を、写し ${name}（Case ${newCount}件）で置き換えます。\n今の記録は、先に写しとして保存します。`, '置き換える'))) return;
-  if (!saveBlocked && nowCount) {      // keep the current record as one more copy before replacing it
-    clearTimeout(backup.timer); await runBackup();
-    if (backup.error && !(await ask('今の記録の写しを保存できませんでした（' + backup.error.why + '）。それでも置き換えますか？', '置き換える'))) return;
+  // Keep the current record as one more copy first, whatever it holds (settings count too, even with 0 Cases). The
+  // copy waits for any copy already in flight and reports its own result.
+  if (!saveBlocked) {
+    clearTimeout(backup.timer);
+    const kept = await runBackup();
+    if (!kept.ok && !kept.skipped && !(await ask('今の記録の写しを保存できませんでした（' + kept.why + '）。それでも置き換えますか？', '置き換える'))) return;
   }
   if (saveBlocked) { if (!(await ask('保存が止まっています。写しの内容で保存を再開しますか？（読めなかった保存データは上書きされます）'))) return; saveBlocked = false; $('saveWarn').hidden = true; }
-  store = p.store; save(); render(); schedulePoll();
+  const prev = store;
+  store = p.store;
+  if (!save()) { store = prev; render(); return tell('戻した記録を保存できませんでした。今の記録はそのままです（画面の警告を確認してください）。'); }
+  render(); schedulePoll();
   tell(`写し ${name} から戻しました（Case ${newCount}件）。`);
 }
 function pickCopy(list) {
@@ -130,8 +142,10 @@ function bump(c, k, n = 1) { c.metrics[k] = (c.metrics[k] || 0) + n; }
 // 2-B: date + counter + random suffix (StudioText.caseIdFor). When a relay is set, an ID whose folder already exists
 // there is not used. If the relay cannot be asked, the random suffix alone keeps the ID apart (logged by the caller).
 function randomSuffix() {
-  const b = new Uint8Array(6); crypto.getRandomValues(b);
-  return [...b].map(x => '0123456789abcdefghijklmnopqrstuvwxyz'[x % 36]).join('');
+  // Uniform over 36 characters: bytes 252..255 are rejected (252 = 36 × 7), so every character is equally likely.
+  const A = '0123456789abcdefghijklmnopqrstuvwxyz', out = [];
+  while (out.length < 6) { const b = new Uint8Array(12); crypto.getRandomValues(b); for (const x of b) if (x < 252 && out.length < 6) out.push(A[x % 36]); }
+  return out.join('');
 }
 async function newCaseId() {
   for (let i = 0; i < 5; i++) {

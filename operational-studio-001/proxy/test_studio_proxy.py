@@ -214,6 +214,36 @@ class RelayFileTests(unittest.TestCase):
         self.assertEqual(self.get_status('/snapshot', origin='https://example.com', name='x')[0], 403)
         self.assertEqual(len(list((self.ex / '_snapshots').iterdir())), 1)
 
+    def test_snapshot_reply_reports_how_much_is_kept(self):
+        a = self.snap({'rev': 1, 'store': self.STORE})
+        b = self.snap({'rev': 2, 'store': self.STORE})
+        n = len(self.STORE.encode('utf-8'))
+        self.assertEqual((a['count'], a['totalBytes']), (1, n))
+        self.assertEqual((b['count'], b['totalBytes']), (2, 2 * n))
+        self.assertEqual(self.get_status('/snapshots')[1]['totalBytes'], 2 * n)
+
+    def test_symbolic_links_in_the_snapshot_folder_are_neither_listed_nor_read(self):
+        self.snap({'rev': 1, 'store': self.STORE})
+        outside = self.ex / 'outside.json'
+        outside.write_text('{"secret": true}', encoding='utf-8')
+        link = self.ex / '_snapshots' / 'ats-store-20261021T000000000Z-r9.json'
+        try:
+            os.symlink(outside, link)
+        except (OSError, NotImplementedError) as e:
+            self.skipTest(f'cannot create a symbolic link here: {e}')
+        names = [s['name'] for s in self.get_status('/snapshots')[1]['snapshots']]
+        self.assertNotIn(link.name, names)
+        self.assertEqual(self.get_status('/snapshot', name=link.name)[0], 404)
+
+    def test_files_reported_as_links_are_excluded_even_without_symlink_rights(self):
+        a = self.snap({'rev': 1, 'store': self.STORE})['saved']
+        b = self.snap({'rev': 2, 'store': self.STORE})['saved']
+        real = Path.is_symlink
+        with mock.patch.object(Path, 'is_symlink', lambda p: p.name == a or real(p)):
+            self.assertEqual([p.name for p in sp.snapshot_files()], [b])
+            self.assertEqual(self.get_status('/snapshot', name=a)[0], 404)
+            self.assertEqual(self.get_status('/snapshot', name=b)[0], 200)
+
     def test_snapshot_names_outside_the_pattern_are_not_read(self):
         (self.ex / 'secret.json').write_text('{}', encoding='utf-8')
         for name in ('../secret.json', 'secret.json', 'ats-store-x.json', ''):
