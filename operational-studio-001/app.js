@@ -49,8 +49,76 @@ function load() {
 // Returns whether the store was written. Callers that must not continue without a stored record (Q-1) check it.
 function save() {
   if (saveBlocked) return false;
-  try { localStorage.setItem(KEY, JSON.stringify(store)); return true; }
-  catch (e) { flash('保存に失敗しました（' + e.name + '）。記録をJSONで保存してください。', true); return false; }
+  const prevRev = store.rev || 0;
+  store.rev = prevRev + 1;    // 2-C: a revision number for the record copies
+  try { localStorage.setItem(KEY, JSON.stringify(store)); scheduleBackup(); return true; }
+  catch (e) { store.rev = prevRev; flash('保存に失敗しました（' + e.name + '）。記録をJSONで保存してください。', true); return false; }
+}
+
+// ---------- 2-C: copies of the record in the relay folder ----------
+// After a successful save, and 3 s after the last one, the text actually stored in localStorage (never an unsaved
+// state) is sent to the relay, which keeps every copy as its own file. One copy is in flight at a time; a save during
+// it schedules one more. Nothing is sent while saving is blocked. Failures are shown, never hidden.
+const BACKUP_DELAY = 3000;
+const backup = { timer: null, inflight: false, again: false, last: null, error: null };
+function scheduleBackup() {
+  if (!store.settings.proxyUrl) return renderBackupNote();
+  clearTimeout(backup.timer); backup.timer = setTimeout(runBackup, BACKUP_DELAY);
+}
+async function runBackup() {
+  if (saveBlocked || !store.settings.proxyUrl) return renderBackupNote();
+  if (backup.inflight) { backup.again = true; return; }
+  let text = null;
+  try { text = localStorage.getItem(KEY); } catch (e) { backup.error = { at: now(), why: '保存領域を読めません' }; return renderBackupNote(); }
+  if (text == null) return renderBackupNote();
+  backup.inflight = true;
+  try {
+    const r = await fetch(store.settings.proxyUrl.replace(/\/$/, '') + '/snapshot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rev: store.rev || 0, store: text }) });
+    const j = await r.json();
+    if (!r.ok || !j.saved) throw new Error(j.error || 'HTTP ' + r.status);
+    backup.last = { at: now(), name: j.saved, rev: store.rev || 0 }; backup.error = null;
+  } catch (e) { backup.error = { at: now(), why: e.message }; }
+  backup.inflight = false;
+  if (backup.again) { backup.again = false; scheduleBackup(); }
+  renderBackupNote();
+}
+function renderBackupNote() {
+  const el = $('backupNote'); if (!el) return;
+  el.className = backup.error ? 'ng' : '';
+  el.textContent = !store.settings.proxyUrl ? 'なし（中継なし）' : backup.error ? `失敗 ${hm(backup.error.at)}（${backup.error.why}）` : backup.last ? `${hm(backup.last.at)}（r${backup.last.rev}）` : '中継へ保存します';
+}
+async function restoreFromCopy() {
+  if (!store.settings.proxyUrl) return tell('記録の写しは中継のフォルダにあります。先に「AIの接続設定」で中継のURLを入れてください。');
+  const base = store.settings.proxyUrl.replace(/\/$/, '');
+  let list;
+  try { list = await (await fetch(base + '/snapshots')).json(); } catch (e) { return tell('中継に届きません（' + e.message + '）'); }
+  if (!list.snapshots || !list.snapshots.length) return tell('記録の写しはまだありません。');
+  const name = await pickCopy(list);
+  if (!name) return;
+  let text;
+  try { text = (await (await fetch(base + '/snapshot?' + new URLSearchParams({ name }))).json()).text; } catch (e) { return tell('写しを読めません（' + e.message + '）'); }
+  const p = StudioText.parseStoreSnapshot(text);
+  if (p.error) return tell('この写しは使えません：' + p.error);
+  const nowCount = Object.keys(store.cases).length, newCount = Object.keys(p.store.cases).length;
+  if (!(await ask(`今の記録（Case ${nowCount}件）を、写し ${name}（Case ${newCount}件）で置き換えます。\n今の記録は、先に写しとして保存します。`, '置き換える'))) return;
+  if (!saveBlocked && nowCount) {      // keep the current record as one more copy before replacing it
+    clearTimeout(backup.timer); await runBackup();
+    if (backup.error && !(await ask('今の記録の写しを保存できませんでした（' + backup.error.why + '）。それでも置き換えますか？', '置き換える'))) return;
+  }
+  if (saveBlocked) { if (!(await ask('保存が止まっています。写しの内容で保存を再開しますか？（読めなかった保存データは上書きされます）'))) return; saveBlocked = false; $('saveWarn').hidden = true; }
+  store = p.store; save(); render(); schedulePoll();
+  tell(`写し ${name} から戻しました（Case ${newCount}件）。`);
+}
+function pickCopy(list) {
+  return new Promise(res => {
+    const d = document.createElement('dialog');
+    d.innerHTML = `<p>戻す写しを選んでください（新しい順。全 ${list.total} 件のうち ${list.snapshots.length} 件）</p><p class="hint">${esc(list.dir || '')}</p>
+      <select id="copyPick" size="8" style="min-width:420px">${list.snapshots.map((s, i) => `<option value="${esc(s.name)}"${i ? '' : ' selected'}>${esc(s.name)}（${Math.ceil(s.bytes / 1024)} KB）</option>`).join('')}</select>
+      <div class="row end"><button class="btn" value="no">やめる</button><button class="btn primary" value="ok">この写しを使う</button></div>`;
+    document.body.appendChild(d); d.showModal();
+    d.querySelectorAll('button').forEach(b => b.onclick = () => { const v = d.querySelector('#copyPick').value; d.close(); d.remove(); res(b.value === 'ok' ? v : null); });
+    d.addEventListener('cancel', () => { d.remove(); res(null); });
+  });
 }
 function block(msg) { saveBlocked = true; setTimeout(() => flash(msg, true), 0); }
 // Save problems get their own banner at the top of the page (render() never overwrites it).
@@ -614,9 +682,10 @@ function bind() {
       if (saveBlocked && await ask('保存が止まっています。読み込んだ内容で保存を再開しますか？（読めなかった保存データは上書きされます）')) { saveBlocked = false; $('saveWarn').hidden = true; }
       log(c, '記録JSONから読み込み'); save(); render(); } catch (err) { tell('読み込めません: ' + err.message); } };
   $('settingsBtn').onclick = () => { renderSettings(); $('settings').showModal(); };
+  $('restoreBtn').onclick = () => restoreFromCopy();
   // Save the relay URL as it is typed, so re-rendering the dialog (e.g. adding an AI) never drops it.
   $('proxyUrl').oninput = () => { const v = $('proxyUrl').value.trim(); if (v !== store.settings.proxyUrl) { store.settings.exchangeDir = ''; store.settings.exchangeFor = ''; } store.settings.proxyUrl = v; save(); };
-  $('settings').addEventListener('close', () => { save(); render(); schedulePoll(); });
+  $('settings').addEventListener('close', () => { save(); render(); renderBackupNote(); schedulePoll(); });
   $('proxyTest').onclick = async () => { try { const url = $('proxyUrl').value.trim(); const j = await proxyHealth(url); store.settings.exchangeDir = j.exchange || ''; store.settings.exchangeFor = url; save(); $('proxyMsg').textContent = `中継に届きました（使えるAPI: ${j.providers.join(', ') || 'なし'}／受け渡しフォルダ: ${j.exchange}）。AI との往復ができるかは、まだ確かめていません。`; } catch (e) { store.settings.exchangeDir = ''; store.settings.exchangeFor = ''; save(); $('proxyMsg').textContent = '接続できません: ' + e.message; } };
   $('newObsBtn').onclick = () => { const v = $('newObs').value.trim(); if (!v || store.settings.observers.some(o => o.name === v)) return; store.settings.observers.push({ name: v, connector: 'manual', route: 'manual' }); $('newObs').value = ''; save(); renderSettings(); render(); };
 }
@@ -652,4 +721,4 @@ function caseMd(c) {
   return L.join('\n');
 }
 
-load(); bind(); render(); schedulePoll();
+load(); bind(); render(); renderBackupNote(); schedulePoll();

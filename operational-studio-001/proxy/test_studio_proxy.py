@@ -155,6 +155,70 @@ class RelayFileTests(unittest.TestCase):
         self.assertEqual(self.get('/case-exists', case='CASE-20261021-001-abc123'), {'exists': True})
         self.assertEqual(self.get('/case-exists', case='CASE-20261021-001-zzz999'), {'exists': False})
 
+    STORE = json.dumps({'version': 1, 'cases': {'CASE-20261021-001-abc123': {'question': '問い'}}, 'order': []}, ensure_ascii=False)
+
+    def snap(self, body, origin=None, raw=None):
+        data = raw if raw is not None else json.dumps(body).encode('utf-8')
+        headers = {'Content-Type': 'application/json'}
+        if origin:
+            headers['Origin'] = origin
+        req = urllib.request.Request(self.base + '/snapshot', data=data, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r:
+                return json.loads(r.read().decode('utf-8'))
+        except urllib.error.HTTPError as e:
+            return {'status': e.code, **json.loads(e.read().decode('utf-8'))}
+
+    def get_status(self, path, origin=None, **q):
+        req = urllib.request.Request(f'{self.base}{path}?{urllib.parse.urlencode(q)}', headers={'Origin': origin} if origin else {})
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r:
+                return 200, json.loads(r.read().decode('utf-8'))
+        except urllib.error.HTTPError as e:
+            return e.code, json.loads(e.read().decode('utf-8'))
+
+    def test_snapshot_is_saved_listed_and_read_back_exactly(self):
+        r = self.snap({'rev': 3, 'store': self.STORE}, origin='http://localhost:8773')
+        self.assertRegex(r['saved'], r'^ats-store-\d{8}T\d{9}Z-r3\.json$')
+        f = self.ex / '_snapshots' / r['saved']
+        self.assertEqual(f.read_bytes(), self.STORE.encode('utf-8'))
+        self.assertEqual(r['sha256'], hashlib.sha256(self.STORE.encode('utf-8')).hexdigest())
+        code, listing = self.get_status('/snapshots')
+        self.assertEqual((code, [s['name'] for s in listing['snapshots']], listing['total']), (200, [r['saved']], 1))
+        code, one = self.get_status('/snapshot', name=r['saved'])
+        self.assertEqual((code, one['text']), (200, self.STORE))
+        self.assertTrue(self.no_temp_files())
+
+    def test_each_snapshot_is_a_new_file(self):
+        names = {self.snap({'rev': 1, 'store': self.STORE})['saved'] for _ in range(5)}
+        self.assertEqual(len(names), 5)
+        self.assertEqual(len(list((self.ex / '_snapshots').iterdir())), 5)
+
+    def test_snapshot_that_is_not_a_studio_record_is_refused_and_nothing_is_written(self):
+        for store in ('not json', json.dumps({'version': 2, 'cases': {}}), json.dumps([1, 2])):
+            r = self.snap({'rev': 1, 'store': store})
+            self.assertEqual(r['status'], 400, store)
+        self.assertEqual(self.snap({'rev': 1})['status'], 400)
+        self.assertFalse((self.ex / '_snapshots').exists())
+
+    def test_snapshot_over_the_size_limit_is_refused(self):
+        with mock.patch.object(sp, 'MAX_SNAPSHOT', 100):
+            r = self.snap({'rev': 1, 'store': self.STORE + ' ' * 200})
+        self.assertEqual(r['status'], 413)
+        self.assertFalse((self.ex / '_snapshots').exists())
+
+    def test_snapshots_are_refused_to_pages_that_are_not_local(self):
+        self.snap({'rev': 1, 'store': self.STORE})
+        self.assertEqual(self.snap({'rev': 1, 'store': self.STORE}, origin='https://akirameikyou.github.io')['status'], 403)
+        self.assertEqual(self.get_status('/snapshots', origin='https://akirameikyou.github.io')[0], 403)
+        self.assertEqual(self.get_status('/snapshot', origin='https://example.com', name='x')[0], 403)
+        self.assertEqual(len(list((self.ex / '_snapshots').iterdir())), 1)
+
+    def test_snapshot_names_outside_the_pattern_are_not_read(self):
+        (self.ex / 'secret.json').write_text('{}', encoding='utf-8')
+        for name in ('../secret.json', 'secret.json', 'ats-store-x.json', ''):
+            self.assertEqual(self.get_status('/snapshot', name=name)[0], 404, name)
+
     def test_unsafe_path_parts_are_refused_and_nothing_is_written(self):
         r = self.post({'case': '..', 'task': 'T', 'to': 'GPT', 'route': 'agent', 'packet': 'p'})
         self.assertEqual(r['status'], 500)

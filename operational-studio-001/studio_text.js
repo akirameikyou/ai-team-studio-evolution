@@ -126,11 +126,23 @@
     return `CASE-${ymd}-${String(n).padStart(3, '0')}-${sfx.slice(0, 6)}`;
   }
 
+  // 2-C: a record copy read back from the relay, checked with the same rules app.js load() applies to localStorage
+  // (version 1, cases an object), plus order / settings so a restored record can be rendered.
+  function parseStoreSnapshot(text) {
+    let o;
+    try { o = JSON.parse(String(text)); } catch (e) { return { error: 'JSON として読めません' }; }
+    if (!o || typeof o !== 'object' || o.version !== 1 || !o.cases || typeof o.cases !== 'object' || Array.isArray(o.cases)) return { error: 'スタジオの記録（version 1）ではありません' };
+    if (!Array.isArray(o.order) || !o.settings || typeof o.settings !== 'object' || !Array.isArray(o.settings.observers)) return { error: '記録の形が足りません（order / settings）' };
+    const missing = o.order.filter(id => !o.cases[id]);
+    if (missing.length) return { error: '一覧にある Case が記録にありません：' + missing.join(', ') };
+    return { store: o };
+  }
+
   // A Markdown code fence longer than the longest run of backticks in the text (at least three).
   function fenceFor(text) {
     const runs = String(text == null ? '' : text).match(/`+/g) || [];
     return '`'.repeat(Math.max(3, ...runs.map(r => r.length + 1)));
   }
 
-  global.StudioText = { extractSources, splitDifferences, LAYERS, relaySafeName, relayPaths, agentInstruction, TEXT_KIND, TEXT_MAX, textSource, sourceBodies, isDuplicateText, fenceFor, caseIdFor };
+  global.StudioText = { extractSources, splitDifferences, LAYERS, relaySafeName, relayPaths, agentInstruction, TEXT_KIND, TEXT_MAX, textSource, sourceBodies, isDuplicateText, fenceFor, caseIdFor, parseStoreSnapshot };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

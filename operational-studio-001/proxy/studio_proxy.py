@@ -22,6 +22,28 @@ EXCHANGE = HERE / 'exchange'
 ALLOWED_ORIGINS = re.compile(r'^(https?://(127\.0\.0\.1|localhost)(:\d+)?|https://akirameikyou\.github\.io)$')
 MAX_FETCH = 50 * 1024 * 1024
 SETTLE_SECONDS = 2  # a reply file changed this recently (inclusive) may still be being written by an agent
+# 2-C: copies of the Studio record in <exchange>/_snapshots. One file per copy; nothing is overwritten or deleted.
+MAX_SNAPSHOT = 10 * 1024 * 1024
+SNAPSHOT_NAME = re.compile(r'^ats-store-\d{8}T\d{9}Z-r\d+(-\d+)?\.json$')
+LOCAL_ORIGIN = re.compile(r'^https?://(127\.0\.0\.1|localhost)(:\d+)?$')
+_SNAPSHOT_NAME_LOCK = threading.Lock()
+
+
+def snapshots_dir():
+    return EXCHANGE / '_snapshots'
+
+
+def snapshot_problem(text):
+    """None if text is a Studio record (the shape app.js load() accepts), else the reason."""
+    if not isinstance(text, str):
+        return 'store must be the record as JSON text'
+    try:
+        o = json.loads(text)
+    except ValueError:
+        return 'store is not JSON'
+    if not isinstance(o, dict) or o.get('version') != 1 or not isinstance(o.get('cases'), dict):
+        return 'store is not a Studio record (version 1 with cases)'
+    return None
 
 
 def load_env():
@@ -157,6 +179,17 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if u.path == '/health':
                 return self.reply(200, {'ok': True, 'providers': providers(), 'exchange': str(EXCHANGE)})
+            if u.path in ('/snapshots', '/snapshot') and not self.local_origin():
+                return self.reply(403, {'error': 'snapshots are for local pages only'})
+            if u.path == '/snapshots':
+                files = sorted(snapshots_dir().glob('ats-store-*.json'), key=lambda p: p.name, reverse=True) if snapshots_dir().exists() else []
+                return self.reply(200, {'dir': str(snapshots_dir()), 'snapshots': [
+                    {'name': p.name, 'bytes': p.stat().st_size} for p in files[:50]], 'total': len(files)})
+            if u.path == '/snapshot':
+                name = q.get('name', '')
+                if not SNAPSHOT_NAME.match(name) or not (snapshots_dir() / name).is_file():
+                    return self.reply(404, {'error': 'no such snapshot'})
+                return self.reply(200, {'name': name, 'text': (snapshots_dir() / name).read_bytes().decode('utf-8')})
             if u.path == '/case-exists':
                 # 2-B: lets the Studio avoid a Case ID whose folder is already here (read-only; nothing is created).
                 return self.reply(200, {'exists': (EXCHANGE / safe(q['case'])).exists()})
@@ -185,8 +218,17 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             return self.reply(500, {'error': str(e)})
 
+    def local_origin(self):
+        """Snapshots hold the whole Studio record, so they are served only to pages on this machine (or to
+        clients that send no Origin, such as tests), not to the GitHub Pages origin the CORS list allows."""
+        origin = self.headers.get('Origin')
+        return origin is None or bool(LOCAL_ORIGIN.match(origin))
+
     def do_POST(self):
-        if urllib.parse.urlparse(self.path).path != '/task':
+        path = urllib.parse.urlparse(self.path).path
+        if path == '/snapshot':
+            return self.post_snapshot()
+        if path != '/task':
             return self.reply(404, {'error': 'unknown path'})
         try:
             n = int(self.headers.get('Content-Length', '0'))
@@ -211,6 +253,35 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(200, {'text': text, 'note': route})
         except urllib.error.HTTPError as e:
             return self.reply(502, {'error': f'API HTTP {e.code}'})
+        except Exception as e:
+            return self.reply(500, {'error': str(e)})
+
+    def post_snapshot(self):
+        """2-C: store one copy of the Studio record as a new file (a generation). Nothing is overwritten or pruned:
+        how long copies are kept is a human decision (README)."""
+        if not self.local_origin():
+            return self.reply(403, {'error': 'snapshots are for local pages only'})
+        try:
+            n = int(self.headers.get('Content-Length', '0'))
+            if n > MAX_SNAPSHOT:
+                return self.reply(413, {'error': f'too large ({n} bytes, limit {MAX_SNAPSHOT})'})
+            j = json.loads(self.rfile.read(n).decode('utf-8'))
+            text, rev = j['store'], int(j.get('rev', 0))
+            problem = snapshot_problem(text)
+            if problem:
+                return self.reply(400, {'error': problem})
+            snapshots_dir().mkdir(parents=True, exist_ok=True)
+            with _SNAPSHOT_NAME_LOCK:
+                stamp = time.strftime('%Y%m%dT%H%M%S', time.gmtime()) + f'{int(time.time() * 1000) % 1000:03d}Z'
+                name, k = f'ats-store-{stamp}-r{rev}.json', 1
+                while (snapshots_dir() / name).exists():
+                    k += 1
+                    name = f'ats-store-{stamp}-r{rev}-{k}.json'
+                write_atomic(snapshots_dir() / name, text)
+            data = text.encode('utf-8')
+            return self.reply(200, {'saved': name, 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest()})
+        except (KeyError, ValueError, TypeError) as e:
+            return self.reply(400, {'error': f'bad request: {e}'})
         except Exception as e:
             return self.reply(500, {'error': str(e)})
 

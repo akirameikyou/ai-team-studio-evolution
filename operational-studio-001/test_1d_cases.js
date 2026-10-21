@@ -212,6 +212,17 @@ test('T-07 Case 番号（日付・連番・乱数）', () => {
   check(T.relaySafeName(a) === a, '中継のフォルダ名としてそのまま使える');
 });
 
+test('T-08 記録の写しを読み戻すときの確認（2-C）', () => {
+  const ok = { version: 1, cases: { A: { id: 'A' } }, order: ['A'], currentId: 'A', settings: { proxyUrl: '', observers: [] } };
+  const r = T.parseStoreSnapshot(JSON.stringify(ok));
+  check(!r.error && r.store.cases.A.id === 'A', '正しい記録は読める');
+  check(T.parseStoreSnapshot('{').error, 'JSON でなければ使わない');
+  check(T.parseStoreSnapshot(JSON.stringify({ ...ok, version: 2 })).error, 'version が 1 でなければ使わない');
+  check(T.parseStoreSnapshot(JSON.stringify({ ...ok, cases: [] })).error, 'cases が配列なら使わない');
+  check(T.parseStoreSnapshot(JSON.stringify({ ...ok, settings: undefined })).error, 'settings がなければ使わない');
+  check(T.parseStoreSnapshot(JSON.stringify({ ...ok, order: ['A', 'B'] })).error, '一覧にあるのに記録がない Case があれば使わない');
+});
+
 test('T-06 結果ファイルは一時ファイルに書いてから名前を変えるよう頼む', () => {
   const p = T.relayPaths('C:/x/exchange', 'C1', 'C1-OBS-Codex', 'Codex');
   const s = T.agentInstruction(p);
