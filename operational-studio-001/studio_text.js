@@ -88,7 +88,11 @@
   function textSource(id, title, text, sha256, size, at) {
     const t = String(text == null ? '' : text);
     if (!t.trim()) return { error: '本文が空です' };
+    // The limit counts UTF-16 code units (String.length): a character outside the BMP counts as 2. This errs on the safe
+    // side for the browser's storage quota, which is also measured in code units (Codex review of 12d366f).
     if (t.length > TEXT_MAX) return { error: `本文が長すぎます（${t.length}文字。上限 ${TEXT_MAX}文字）` };
+    // The hash and size come from the caller; the size is checked against the text here (the hash cannot be, synchronously).
+    if (sha256 && typeof TextEncoder !== 'undefined' && new TextEncoder().encode(t).length !== size) return { error: '本文の大きさが記録と合いません' };
     return { id, kind: TEXT_KIND, ref: String(title || '').trim() || '前提資料', text: t, claimedHash: null,
       verified: sha256 ? { sha256, size, by: 'Studio（本文を保存）', at } : null, access: {} };
   }

@@ -165,7 +165,8 @@ test('T-01 本文の資料を作る（2-1A）', () => {
 
 test('T-02 依頼文に入れる本文の区切り（2-1A）', () => {
   check(T.sourceBodies([]).length === 0 && T.sourceBodies([{ id: 'S1', kind: 'URL', ref: 'https://x' }]).length === 0, '本文の資料が無ければ何も足さない');
-  const s = T.textSource('S1', '前提', ['一行目', '', '三行目'].join(NL), 'cd'.repeat(32), 10, 't');
+  const s = T.textSource('S1', '前提', ['一行目', '', '三行目'].join(NL), 'cd'.repeat(32), 20, 't');
+  check(T.textSource('S1', '前提', '本文', 'cd'.repeat(32), 99, 't').error, '渡された大きさが本文の UTF-8 バイト数と合わなければ登録しない');
   const b = T.sourceBodies([s]);
   check(b.includes(s.text), '本文は1つの要素のまま入る（空行を含んだまま）');
   check(b.filter(x => x !== '').includes(s.text), '空の要素を除く処理（実行タスクの依頼文）を通っても本文は残る');
