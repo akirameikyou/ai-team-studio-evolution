@@ -279,6 +279,60 @@ class RelayFileTests(unittest.TestCase):
         self.assertEqual(r['status'], 500)
         self.assertEqual(list(self.ex.rglob('*')), [])
 
+    # --- 3-1: the runner's state (.<ai>-run), read only ---
+    CLAIM = {'state': 'running', 'since': '2026-10-21T17:00:16', 'at': '2026-10-21T17:00:16', 'pid': 123,
+             'condition': {'route': 'runner', 'runner': 'codex_runner 0.2', 'preamble': 'P1', 'codex': 'codex-cli 0.163',
+                           'sandbox': 'read-only', 'effort': 'default', 'secret': 'x'}, 'extra': 'not passed on'}
+
+    def codex_dir(self, claim=None, raw=None):
+        d = self.task_dir(task='C1-OBS-Codex')
+        d.mkdir(parents=True, exist_ok=True)
+        if claim is not None or raw is not None:
+            (d / '.codex-run').write_bytes(raw if raw is not None else json.dumps(claim, ensure_ascii=False).encode('utf-8'))
+        return d
+
+    def test_without_a_claim_the_result_is_unchanged(self):
+        self.codex_dir()
+        self.assertEqual(self.result('C1', 'C1-OBS-Codex', 'Codex'), {'pending': True})
+
+    def test_a_running_claim_is_reported_with_only_the_known_fields(self):
+        self.codex_dir(self.CLAIM)
+        self.assertEqual(self.result('C1', 'C1-OBS-Codex', 'Codex'), {'pending': True, 'runner': {
+            'state': 'running', 'since': '2026-10-21T17:00:16', 'at': '2026-10-21T17:00:16',
+            'condition': {'route': 'runner', 'runner': 'codex_runner 0.2', 'preamble': 'P1', 'codex': 'codex-cli 0.163',
+                          'sandbox': 'read-only', 'effort': 'default'}}})
+
+    def test_a_failed_claim_carries_its_reason(self):
+        self.codex_dir({'state': 'failed', 'since': 's', 'reason': '時間切れ（1800 秒）', 'seconds': 1800})
+        self.assertEqual(self.result('C1', 'C1-OBS-Codex', 'Codex')['runner'],
+                         {'state': 'failed', 'since': 's', 'reason': '時間切れ（1800 秒）', 'seconds': 1800})
+
+    def test_a_reply_comes_with_the_done_claim(self):
+        d = self.codex_dir({**self.CLAIM, 'state': 'done', 'seconds': 11})
+        f = d / 'from-Codex.md'; f.write_bytes('返事'.encode('utf-8'))
+        old = time.time() - sp.SETTLE_SECONDS - 1; os.utime(f, (old, old))
+        r = self.result('C1', 'C1-OBS-Codex', 'Codex')
+        self.assertEqual(r['text'], '返事'); self.assertEqual(r['runner']['state'], 'done'); self.assertEqual(r['runner']['seconds'], 11)
+
+    def test_a_claim_that_cannot_be_used_is_reported_as_unknown(self):
+        for raw in (b'{broken', b'[]', json.dumps({'state': 'whatever'}).encode(), b'{"state":"running","pad":"' + b'x' * 5000 + b'"}'):
+            with self.subTest(raw=raw[:20]):
+                self.codex_dir(raw=raw)
+                self.assertEqual(self.result('C1', 'C1-OBS-Codex', 'Codex'), {'pending': True, 'runner': {'state': 'unknown'}})
+
+    def test_a_claim_reported_as_a_link_is_not_read(self):
+        self.codex_dir(self.CLAIM)
+        real = Path.is_symlink
+        with mock.patch.object(Path, 'is_symlink', lambda p: p.name == '.codex-run' or real(p)):
+            self.assertEqual(self.result('C1', 'C1-OBS-Codex', 'Codex'), {'pending': True, 'runner': {'state': 'unknown'}})
+
+    def test_reading_the_state_changes_nothing(self):
+        d = self.codex_dir(self.CLAIM)
+        before = (d / '.codex-run').read_bytes()
+        self.result('C1', 'C1-OBS-Codex', 'Codex')
+        self.assertEqual((d / '.codex-run').read_bytes(), before)
+        self.assertEqual(sorted(p.name for p in d.iterdir()), ['.codex-run'])
+
 
 if __name__ == '__main__':
     unittest.main()

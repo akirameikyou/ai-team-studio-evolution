@@ -154,11 +154,12 @@
     return 'adopted';
   }
 
-  // One receipt (paste / file / relay / API). meta = { via, now, rawSha256, expectedTask }.
+  // One receipt (paste / file / relay / API). meta = { via, now, rawSha256, expectedTask, runner? }.
   function receive(c, text, meta) {
     const now = meta.now, parsed = parseAll(text);
     const a = { attemptId: newId('A', now), at: now, via: meta.via, raw: text, rawSha256: meta.rawSha256 || null, expectedTask: meta.expectedTask || null,
                 parsed, ruleVersion: P().RULE_VERSION, templateTableVersion: P().TEMPLATE_TABLE_VERSION, picked: null, notAdopted: [], assignment: null, outcome: null };
+    if (meta.runner) a.runner = meta.runner;   // 3-1 (D1): how a relay reply was produced (runner conditions); absent otherwise
     (c.parseAttempts = c.parseAttempts || []).push(a);                                            // R-1: record first
     const usable = TAGS.filter(([k]) => parsed[k] && ADOPTABLE.includes(parsed[k].status)).map(([k]) => k);
     if (usable.length) {

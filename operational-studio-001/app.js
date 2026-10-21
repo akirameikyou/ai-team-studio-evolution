@@ -287,9 +287,9 @@ function describeAttempt(a) {
   if (a.notAdopted.length) s += `／同じ貼り付けの中の ${a.notAdopted.map(x => TAG_LABEL[x.tag]).join('・')} は採用していません（優先順で後）`;
   return s;
 }
-async function receiveText(c, text, via, expectedTask) {
+async function receiveText(c, text, via, expectedTask, runner) {
   let h = null; try { h = await sha256Hex(new TextEncoder().encode(text)); } catch (_) { }
-  const a = StudioState.receive(c, text, { via, now: now(), rawSha256: h, expectedTask: expectedTask || null });
+  const a = StudioState.receive(c, text, { via, now: now(), rawSha256: h, expectedTask: expectedTask || null, runner: runner || null });
   if (a.assignment && a.assignment.kind === 'RESULT' && a.outcome === 'adopted') updateAccess(c, a.assignment.name);
   log(c, `受信 ${a.attemptId}（${via}）: ${describeAttempt(a)}`);
   return a;
@@ -428,8 +428,10 @@ function agentTarget(c, kind, name) {
 }
 function showAgentGuide(c, kind, name) {
   const p = agentTarget(c, kind, name), text = StudioText.agentInstruction(p);
+  const req = StudioState.currentRequest(c, kind, name), note = req ? StudioText.runnerGuideNote(runnerOf(c, req.task), name) : '';
   const d = document.createElement('dialog');
   d.innerHTML = `<h2>${esc(name)} への指示（ファイル受け渡し）</h2>
+    ${note ? `<p class="warn">${esc(note)}</p>` : ''}
     <p class="hint">中継は AI を起動しません。次の文面を ${esc(name)} に渡してください。${p && p.estimated ? '<br><b>このパスは推定です</b>（中継がファイルの場所を返さなかったため、Studio が計算しました。まれな文字を含む名前では、中継の実際の場所と違うことがあります）。' + (p.relative ? '受け渡しフォルダの場所も分からないので、中継のフォルダからの相対パスです。' : '') : p ? '中継が実際に書いたファイルの場所です。' : ''}</p>
     ${text ? `<textarea rows="10" readonly>${esc(text)}</textarea>` : '<p class="warn">AI の名前または Task ID がファイル名に使えないため、パスを作れません。</p>'}
     <div class="row end">${text ? '<button class="btn primary" value="copy">指示をコピー</button>' : ''}<button class="btn" value="close">閉じる</button></div>`;
@@ -452,6 +454,10 @@ async function autoDispatch(c) {
 // Collections run one at a time (the 8 s timer and the manual button can overlap): each run sees the attempts
 // recorded by the previous one, so the same relay text is never recorded twice (Codex C40 a).
 let collectQueue = Promise.resolve(0);
+// 3-1: the last runner state the relay reported, per Case and Task. Kept in memory for display only (not in the record).
+const runnerStates = new Map();
+const runnerOf = (c, taskId) => runnerStates.get(c.id + '|' + taskId) || null;
+const received = (c, taskId) => StudioState.attempts(c).some(a => a.expectedTask === taskId);   // a receipt for this Task exists
 function collectAll(c, quiet) { const run = collectQueue.then(() => collectOnce(c, quiet)); collectQueue = run.catch(() => 0); return run; }
 async function collectOnce(c, quiet) {
   if (!store.settings.proxyUrl) return 0; let got = 0;
@@ -464,12 +470,19 @@ async function collectOnce(c, quiet) {
   for (const n of c.observers) { const t = c.tasks[n]; if (t.sentAt && obsSetting(n).connector === 'proxy' && !has(t.taskId) && !(t.result && !t.result.attemptId)) jobs.push([n, t.taskId]); }
   if (c.synthesisReq && obsSetting(c.synthesisReq.to).connector === 'proxy') { const t = c.synthesisReq.task || StudioState.synTaskId(c); if (!has(t) && !(c.synthesis && !c.synthesisReq.task)) jobs.push([c.synthesisReq.to, t]); }
   if (c.next && !StudioState.nextStale(c) && obsSetting(c.next.to).connector === 'proxy') { const t = c.next.task || StudioState.nextTaskId(c); if (!has(t) && !(c.done && !c.next.task)) jobs.push([c.next.to, t]); }
+  let shown = false;
   for (const [n, taskId] of jobs) {
-    try { const text = await Connectors.proxy.collect({ caseId: c.id, taskId, observer: obsSetting(n), proxyUrl: store.settings.proxyUrl });
-      if (text && !seen(taskId, text)) { await receiveText(c, text, 'ローカル中継', taskId); bump(c, 'autoReceive'); got++; } }
+    try { const res = await Connectors.proxy.collect({ caseId: c.id, taskId, observer: obsSetting(n), proxyUrl: store.settings.proxyUrl });
+      const text = typeof res === 'string' ? res : res && res.text, run = res && typeof res === 'object' ? res.runner || null : null;
+      const key = c.id + '|' + taskId;
+      if (JSON.stringify(runnerStates.get(key) || null) !== JSON.stringify(run)) { if (run) runnerStates.set(key, run); else runnerStates.delete(key); shown = true; }
+      // D1: a reply the runner produced is recorded with the conditions it ran under.
+      const cond = run && run.state === 'done' && run.condition ? { condition: run.condition, seconds: Number.isInteger(run.seconds) ? run.seconds : null } : null;
+      if (text && !seen(taskId, text)) { await receiveText(c, text, 'ローカル中継', taskId, cond); bump(c, 'autoReceive'); got++; } }
     catch (e) { if (!quiet) log(c, `${n} の回収に失敗（${e.message}）`); }
   }
   if (got) { save(); render(); }
+  else if (shown) render();   // only the runner's state changed: show it; nothing is saved
   return got;
 }
 function schedulePoll() {
@@ -515,7 +528,7 @@ function nextStep(c) {
     return [pre + (got < n ? `使える観測 ${got}/${n} 件。` : '全員の観測がそろいました。') + '統合をどのAIに頼むか選んで送ってください。', acts];
   }
   if (!c.synthesis && S.canRetry(c, 'SYN')) { acts.push(isSending(S.currentRequest(c, 'SYN')) ? ['送付中…', () => { }] : ['同じ依頼を送り直す', () => retrySend(c, 'SYN'), true], ['依頼文を表示・コピー', () => showRequest(c, 'SYN')]); return [`${c.synthesisReq.to} への統合の依頼（${c.synthesisReq.task || StudioState.synTaskId(c)}）は送付に失敗しました。依頼文は保存済みです。原因（中継の停止など）を直してから、同じ依頼を送り直してください。`, acts]; }
-  if (!c.synthesis) { acts.push(['依頼文を表示・コピー', () => showRequest(c, 'SYN')]); if (agentTarget(c, 'SYN', c.synthesisReq.to)) acts.push(['AIへの指示を表示', () => showAgentGuide(c, 'SYN', c.synthesisReq.to)]); if (store.settings.proxyUrl) acts.push(['中継から統合を回収', () => collectAll(c)]); return [`${c.synthesisReq.to} の統合結果を待っています（${c.synthesisReq.task || StudioState.synTaskId(c)}）。届いたら「結果を受け取る」に貼ってください。`, acts]; }
+  if (!c.synthesis) { acts.push(['依頼文を表示・コピー', () => showRequest(c, 'SYN')]); if (agentTarget(c, 'SYN', c.synthesisReq.to)) acts.push(['AIへの指示を表示', () => showAgentGuide(c, 'SYN', c.synthesisReq.to)]); if (store.settings.proxyUrl) acts.push(['中継から統合を回収', () => collectAll(c)]); const synTask = c.synthesisReq.task || StudioState.synTaskId(c), run = StudioText.runnerLabel(runnerOf(c, synTask), { received: received(c, synTask) }); return [`${c.synthesisReq.to} の統合結果を待っています（${c.synthesisReq.task || StudioState.synTaskId(c)}）。${run ? run.text + '。' : ''}届いたら「結果を受け取る」に貼ってください。`, acts]; }
   if (!S.synthesisEligible(c)) return ['統合結果に確認が必要な項目があります。「統合」欄で確認してから判断してください。', acts];
   if (!c.gate || S.gateStale(c)) return ['統合結果が届きました。右の「人間の判断」で APPROVE / HOLD / REVISE を選んでください。', acts];
   if (c.gate.decision === 'HOLD') return ['保留中です。確かめることが分かったら、新しい問いを始めるか、判断をやり直してください。', acts];
@@ -586,14 +599,17 @@ function renderObservers(c) {
     const st = r ? `<span class="chip ${ok ? 'ok' : 'wait'}">採用中：${esc(statusLabel(r))}</span><span class="chip ${ok ? 'ok' : 'ng'}">${ok ? '利用可能' : '利用不可（確認待ち）'}</span>`
       : t.sentAt ? '<span class="chip wait">依頼済み・結果待ち</span>' : '<span class="chip">未依頼</span>';
     const gen = S.obsGen(c, n), req = S.currentRequest(c, 'OBS', n), failed = S.canRetry(c, 'OBS', n);
+    const run = !r ? StudioText.runnerLabel(runnerOf(c, t.taskId), { received: received(c, t.taskId) }) : null;
+    const ra = r && r.attemptId ? S.attempts(c).find(a => a.attemptId === r.attemptId) : null, carried = ra && ra.runner ? StudioText.runnerConditionText(ra.runner.condition) : '';
     return `<div class="item"><div class="item-h"><b>${esc(n)}</b>${st}<span class="chip">受信 ${recv}</span><span class="chip">${os.connector === 'manual' ? '手動' : 'ローカル中継'}</span>${gen > 1 ? `<span class="chip">依頼 第${gen}回</span>` : ''}
+      ${run ? `<span class="chip ${run.level}">${esc(run.text)}</span>` : ''}
       ${failed ? '<span class="chip ng">送付に失敗</span>' : ''}
       ${req || t.sentAt ? `<button class="btn ghost" data-req="${esc(n)}">依頼文を表示</button>` : ''}
       ${t.sentAt && !r && !failed && agentTarget(c, 'OBS', n) ? `<button class="btn" data-guide="${esc(n)}">AIへの指示を表示</button>` : ''}
       ${obsSending(c, n) ? '<button class="btn" disabled>送付中…</button>' : `${failed ? `<button class="btn primary" data-retry="${esc(n)}">同じ依頼を送り直す</button>` : ''}
       ${failed && !t.sentAt ? '' : `<button class="btn" data-send="${esc(n)}">${t.sentAt ? '作り直して再送（新しい世代）' : os.connector === 'manual' ? '依頼文をコピー' : '送る'}</button>`}`}</div>
       ${r ? confirmControls(c, 'RESULT', r, n) : ''}
-      ${r ? `<dl class="obs-body"><dt>観測</dt><dd>${esc(r.fields.OBSERVATION || '（ブロックなし。原文を保存）')}</dd><dt>根拠</dt><dd>${esc(r.fields.EVIDENCE || '—')}</dd><dt>不明</dt><dd>${esc(r.fields.UNKNOWN || '—')}</dd><dt>観測条件</dt><dd>${esc(r.fields.CONDITION || '—')}</dd></dl><details><summary class="hint">原文</summary><pre>${esc(r.raw)}</pre></details>` : ''}</div>`; }).join('');
+      ${r ? `<dl class="obs-body"><dt>観測</dt><dd>${esc(r.fields.OBSERVATION || '（ブロックなし。原文を保存）')}</dd><dt>根拠</dt><dd>${esc(r.fields.EVIDENCE || '—')}</dd><dt>不明</dt><dd>${esc(r.fields.UNKNOWN || '—')}</dd><dt>観測条件</dt><dd>${esc(r.fields.CONDITION || '—')}</dd>${carried ? `<dt>運んだ経路</dt><dd>${esc(carried)}</dd>` : ''}</dl><details><summary class="hint">原文</summary><pre>${esc(r.raw)}</pre></details>` : ''}</div>`; }).join('');
   $('observers').querySelectorAll('[data-send]').forEach(b => b.onclick = () => send(c, b.dataset.send, 'observe'));
   $('observers').querySelectorAll('[data-req]').forEach(b => b.onclick = () => showRequest(c, 'OBS', b.dataset.req));
   $('observers').querySelectorAll('[data-guide]').forEach(b => b.onclick = () => showAgentGuide(c, 'OBS', b.dataset.guide));

@@ -161,5 +161,41 @@
     return '`'.repeat(Math.max(3, ...runs.map(r => r.length + 1)));
   }
 
-  global.StudioText = { extractSources, splitDifferences, LAYERS, relaySafeName, relayPaths, agentInstruction, TEXT_KIND, TEXT_MAX, textSource, sourceBodies, isDuplicateText, fenceFor, caseIdFor, parseStoreSnapshot, studioSettingsFrom };
+  // 3-1: the state a runner (proxy/codex_runner.py) reports through the relay's /result as `runner`. Display only:
+  // nothing here changes the record. `since` is the runner's local time (YYYY-MM-DDTHH:MM:SS); only HH:MM is shown.
+  const clock = s => (typeof s === 'string' && /T\d\d:\d\d/.test(s) ? s.slice(s.indexOf('T') + 1, s.indexOf('T') + 6) : '');
+  // The label is shown only while the task has no adopted reply, so "done" never stands alone: either the reply has not
+  // been collected yet, or it was received and not adopted (opts.received: a receipt for this Task exists).
+  function runnerLabel(r, opts) {
+    if (!r || !r.state) return null;
+    const since = clock(r.since), secs = Number.isInteger(r.seconds) ? `${r.seconds}秒・` : '';
+    switch (r.state) {
+      case 'queued': return { text: '実行係：待機中', level: 'wait' };
+      case 'running': return { text: '実行係：実行中' + (since ? `（${since}〜）` : ''), level: 'wait' };
+      case 'done': return opts && opts.received
+        ? { text: `実行係：返事あり（${secs}採用されていません。受信の記録を確かめてください）`, level: 'ng' }
+        : { text: `実行係：返事あり（${secs}回収待ち）`, level: 'wait' };
+      case 'failed': return { text: '実行係：失敗' + (r.reason ? `（${r.reason}）` : ''), level: 'ng' };
+      case 'conflict': return { text: '実行係：衝突（人の返事が先）', level: 'ng' };
+      default: return { text: '実行係：状態を読めません', level: 'ng' };
+    }
+  }
+  // What the "AI への指示" dialog says first, so a person does not start the same request a second time by hand.
+  function runnerGuideNote(r, aiName) {
+    if (!r || !r.state || r.state === 'done') return '';
+    const ai = aiName || 'AI', since = clock(r.since);
+    if (r.state === 'queued' || r.state === 'running')
+      return `実行係がこの依頼を${r.state === 'queued' ? '待っています' : '実行中です' + (since ? `（${since}〜）` : '')}。${ai} には貼らないでください（同じ依頼が二重に実行されます）。止まって見えるときは、作業フォルダの codex-run.log を確かめてください。`;
+    if (r.state === 'conflict')
+      return `人の返事（from-${ai}.md）が先にありました。実行係の返事は from-${ai}.runner.md に残っています。スタジオが回収するのは from-${ai}.md です。`;
+    return `実行係は${r.state === 'failed' ? '失敗しました' + (r.reason ? `（${r.reason}）` : '') : 'の状態を読めません'}。手動に戻すときは：1. 作業フォルダの codex-run.log を見る　2. .codex-run を消す（消すまで実行係はこの依頼をもう一度は実行しません）　3. 下の指示を ${ai} に渡す`;
+  }
+  // The conditions of a run, recorded with the reply (D1): how it was carried, for comparing with replies carried by hand.
+  function runnerConditionText(cond) {
+    if (!cond || typeof cond !== 'object') return '';
+    return [cond.runner || '実行係', cond.preamble && '前置き ' + cond.preamble, cond.codex, cond.sandbox,
+      cond.effort && '推論の強さ ' + cond.effort].filter(Boolean).join('・');
+  }
+
+  global.StudioText = { extractSources, splitDifferences, LAYERS, relaySafeName, relayPaths, agentInstruction, TEXT_KIND, TEXT_MAX, textSource, sourceBodies, isDuplicateText, fenceFor, caseIdFor, parseStoreSnapshot, studioSettingsFrom, runnerLabel, runnerGuideNote, runnerConditionText };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

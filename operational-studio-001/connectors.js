@@ -5,7 +5,8 @@
 //
 // Interface:
 //   send(ctx)    -> Promise<{ status: 'copied'|'shown'|'queued'|'answered', text?: string, note?: string }>
-//   collect(ctx) -> Promise<string|null>   (null = nothing yet; manual connectors have no collect)
+//   collect(ctx) -> Promise<{ text: string|null, runner: object|null }|null>   (text null = nothing yet; manual
+//                   connectors have no collect; runner = the state a runner left in the task folder, 3-1, display only)
 // ctx = { caseId, taskId, observer, packet, proxyUrl }
 
 const Connectors = {
@@ -37,7 +38,7 @@ const Connectors = {
       const u = ctx.proxyUrl.replace(/\/$/, '') + '/result?' + new URLSearchParams({ case: ctx.caseId, task: ctx.taskId, to: ctx.observer.name });
       const r = await fetch(u); if (r.status === 404) return null;
       const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
-      return j.text || null;
+      return { text: j.text || null, runner: j.runner && typeof j.runner === 'object' ? j.runner : null };
     }
   }
 };

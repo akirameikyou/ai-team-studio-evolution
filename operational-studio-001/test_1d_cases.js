@@ -241,6 +241,52 @@ test('T-06 結果ファイルは一時ファイルに書いてから名前を変
   check(s.includes('このファイルだけ'), '書いてよいのは結果ファイルだけ、の文はそのまま');
 });
 
+test('RN-01 実行係の状態の表示（3-1）', () => {
+  check(T.runnerLabel(null) === null && T.runnerLabel({}) === null, '状態が無ければ何も出さない');
+  const run = T.runnerLabel({ state: 'running', since: '2026-10-21T17:00:16' });
+  check(run.text === '実行係：実行中（17:00〜）' && run.level === 'wait', '実行中は開始時刻（時:分）と待ちの色 ' + run.text);
+  check(T.runnerLabel({ state: 'running' }).text === '実行係：実行中', '開始時刻が無ければ時刻を出さない');
+  check(T.runnerLabel({ state: 'queued' }).level === 'wait', '待機中は待ちの色');
+  const done = T.runnerLabel({ state: 'done', seconds: 11 });
+  check(done.text === '実行係：返事あり（11秒・回収待ち）' && done.level === 'wait', '終わってまだ受信していないときは「回収待ち」と待ちの色 ' + done.text);
+  const f = T.runnerLabel({ state: 'failed', reason: '時間切れ（1800 秒）' });
+  check(f.text === '実行係：失敗（時間切れ（1800 秒））' && f.level === 'ng', '失敗は理由と ng の色');
+  check(T.runnerLabel({ state: 'conflict' }).level === 'ng', '衝突は ng');
+  check(T.runnerLabel({ state: 'unknown' }).text === '実行係：状態を読めません', '読めない状態はそう表示');
+  check(T.runnerLabel({ state: 'zzz' }).level === 'ng', '知らない状態も「読めません」');
+});
+
+test('RN-04 実行係が終わっても採用されていない返事は「完了」と出さない', () => {
+  for (const received of [false, true]) {
+    const l = T.runnerLabel({ state: 'done', seconds: 11 }, { received });
+    check(!l.text.includes('完了') && l.level !== 'ok', (received ? '受信済み' : '未受信') + 'のどちらでも「完了」・ok の色にしない ' + l.text);
+  }
+  const ng = T.runnerLabel({ state: 'done', seconds: 11 }, { received: true });
+  check(ng.text === '実行係：返事あり（11秒・採用されていません。受信の記録を確かめてください）' && ng.level === 'ng', '受信したのに採用されていなければ ng の色で確認を促す ' + ng.text);
+  check(T.runnerLabel({ state: 'done' }, { received: true }).text === '実行係：返事あり（採用されていません。受信の記録を確かめてください）', '秒数が無ければ秒数を出さない');
+  check(T.runnerLabel({ state: 'done' }).text === '実行係：返事あり（回収待ち）', '受信の情報が無ければ回収待ち');
+  check(T.runnerLabel({ state: 'running' }, { received: true }).level === 'wait', '受信の情報は完了以外の表示を変えない');
+});
+
+test('RN-02 指示の画面の注意（二重実行を防ぐ・手動に戻す）', () => {
+  check(T.runnerGuideNote(null, 'Codex') === '' && T.runnerGuideNote({ state: 'done' }, 'Codex') === '', '状態なし・完了では何も出さない');
+  const r = T.runnerGuideNote({ state: 'running', since: '2026-10-21T17:00:16' }, 'Codex');
+  check(r.includes('実行中です（17:00〜）') && r.includes('Codex には貼らないでください'), '実行中は「貼らないで」 ' + r);
+  check(T.runnerGuideNote({ state: 'queued' }, 'Codex').includes('貼らないでください'), '待機中も「貼らないで」');
+  const f = T.runnerGuideNote({ state: 'failed', reason: '終了コード 1' }, 'Codex');
+  check(f.includes('失敗しました（終了コード 1）') && f.includes('codex-run.log') && f.includes('.codex-run を消す') && f.includes('Codex に渡す'), '失敗は手動に戻す3つの手順 ' + f);
+  check(T.runnerGuideNote({ state: 'unknown' }, 'Codex').includes('.codex-run を消す'), '読めない状態も手動に戻す手順');
+  const c = T.runnerGuideNote({ state: 'conflict' }, 'Codex');
+  check(c.includes('from-Codex.runner.md') && c.includes('from-Codex.md'), '衝突は両方のファイルの場所');
+});
+
+test('RN-03 観測の条件の文（記録された条件を表示）', () => {
+  check(T.runnerConditionText(null) === '' && T.runnerConditionText('x') === '', '条件が無ければ空');
+  const s = T.runnerConditionText({ route: 'runner', runner: 'codex_runner 0.2', preamble: 'P1', codex: 'codex-cli 0.163.0', sandbox: 'read-only', effort: 'default' });
+  check(s === 'codex_runner 0.2・前置き P1・codex-cli 0.163.0・read-only・推論の強さ default', '版・前置き・Codex の版・権限・推論の強さ ' + s);
+  check(T.runnerConditionText({}) === '実行係', '中身が無くても経路だけは出す');
+});
+
 return results;
 }
 if (typeof module !== 'undefined') module.exports = { run1d };

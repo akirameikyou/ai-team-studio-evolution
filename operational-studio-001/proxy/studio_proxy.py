@@ -58,6 +58,39 @@ def snapshot_problem(text):
     return None
 
 
+# 3-1: the state a runner (codex_runner.py) leaves in a task folder as .<ai>-run. Read only, and only these fields,
+# so the Studio can show "running / failed" and record how a reply was produced. Nothing else in the file is passed on.
+MAX_RUNNER_CLAIM = 4096
+RUNNER_STATES = ('queued', 'running', 'done', 'failed', 'conflict')
+RUNNER_TEXT_FIELDS = ('since', 'at', 'reason')
+RUNNER_CONDITION_FIELDS = ('route', 'runner', 'preamble', 'codex', 'sandbox', 'effort')
+
+
+def runner_state(task_dir, to):
+    """None when there is no claim file; {'state': 'unknown'} when there is one that cannot be used as it is."""
+    p = task_dir / f'.{to.lower()}-run'
+    if not p.exists() and not p.is_symlink():
+        return None
+    try:
+        if p.is_symlink() or not p.is_file() or p.resolve().parent != task_dir.resolve() or p.stat().st_size > MAX_RUNNER_CLAIM:
+            return {'state': 'unknown'}
+        o = json.loads(p.read_bytes().decode('utf-8'))
+    except (OSError, ValueError):
+        return {'state': 'unknown'}
+    if not isinstance(o, dict) or o.get('state') not in RUNNER_STATES:
+        return {'state': 'unknown'}
+    out = {'state': o['state']}
+    for k in RUNNER_TEXT_FIELDS:
+        if isinstance(o.get(k), str):
+            out[k] = o[k][:300]
+    if isinstance(o.get('seconds'), int) and not isinstance(o.get('seconds'), bool):
+        out['seconds'] = o['seconds']
+    cond = o.get('condition')
+    if isinstance(cond, dict):
+        out['condition'] = {k: cond[k][:100] for k in RUNNER_CONDITION_FIELDS if isinstance(cond.get(k), str)}
+    return out
+
+
 def load_env():
     p = HERE / '.env'
     if p.exists():
@@ -214,15 +247,17 @@ class Handler(BaseHTTPRequestHandler):
                 # 2-B: lets the Studio avoid a Case ID whose folder is already here (read-only; nothing is created).
                 return self.reply(200, {'exists': (EXCHANGE / safe(q['case'])).exists()})
             if u.path == '/result':
-                p = EXCHANGE / safe(q['case']) / safe(q['task']) / f"from-{safe(q['to'])}.md"
+                d, to = EXCHANGE / safe(q['case']) / safe(q['task']), safe(q['to'])
+                p, run = d / f'from-{to}.md', runner_state(d, to)
+                extra = {'runner': run} if run else {}
                 if not p.exists():
-                    return self.reply(200, {'pending': True})  # 200, not 404: polling is normal and should not log errors
+                    return self.reply(200, {'pending': True, **extra})  # 200, not 404: polling is normal and should not log errors
                 # A heuristic, not a completion guarantee: agents are asked to publish their reply atomically too
                 # (StudioText.agentInstruction). Files changed within the last SETTLE_SECONDS (inclusive) wait.
                 if time.time() - p.stat().st_mtime <= SETTLE_SECONDS:
-                    return self.reply(200, {'pending': True, 'settling': True})  # possibly half-written by an agent
+                    return self.reply(200, {'pending': True, 'settling': True, **extra})  # possibly half-written by an agent
                 # Read with universal newlines: a reply written with CRLF reaches the Studio with LF (by design).
-                return self.reply(200, {'text': p.read_text(encoding='utf-8')})
+                return self.reply(200, {'text': p.read_text(encoding='utf-8'), **extra})
             if u.path == '/hash':
                 url = q.get('url', '')
                 if not re.match(r'^https?://', url):
