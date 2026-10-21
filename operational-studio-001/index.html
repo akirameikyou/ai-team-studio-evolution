@@ -125,6 +125,7 @@
     <div class="row"><button id="proxyTest" type="button" class="btn">接続を確認</button><span id="proxyMsg" class="hint"></span></div>
     <table class="tbl"><thead><tr><th>AI</th><th>渡し方</th><th>中継先（ローカル中継のとき）</th></tr></thead><tbody id="connRows"></tbody></table>
     <div class="row"><input id="newObs" placeholder="AIを追加（例：Perplexity）"><button id="newObsBtn" type="button" class="btn">追加</button></div>
+    <div class="row"><button id="defaultsBtn" type="button" class="btn ghost">初期設定に戻す</button><span class="hint">中継の proxy/studio.config.json の内容（中継のURL・各AIの渡し方）を読み込みます。記録（Case）は変わりません。</span></div>
     <div class="row end"><button class="btn primary">閉じる</button></div>
   </form>
 </dialog>
@@ -132,8 +133,8 @@
 <script src="connectors.js"></script>
 <script src="parse_v2.js"></script>
 <script src="studio_state.js"></script>
-<script src="studio_text.js?v=2-2c"></script>
+<script src="studio_text.js?v=2-3"></script>
 <script src="studio_packets.js?v=2-2"></script>
-<script src="app.js?v=2-2e"></script>
+<script src="app.js?v=2-3"></script>
 </body>
 </html>

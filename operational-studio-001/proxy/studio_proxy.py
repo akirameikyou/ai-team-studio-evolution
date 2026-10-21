@@ -191,6 +191,12 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if u.path == '/health':
                 return self.reply(200, {'ok': True, 'providers': providers(), 'exchange': str(EXCHANGE)})
+            if u.path == '/studio-config':
+                # 2-E: default Studio settings (no secrets), so a browser whose storage was cleared can start configured.
+                p = HERE / 'studio.config.json'
+                if not p.is_file():
+                    return self.reply(404, {'error': 'no studio.config.json next to the relay'})
+                return self.reply(200, json.loads(p.read_text(encoding='utf-8')))
             if u.path in ('/snapshots', '/snapshot') and not self.local_origin():
                 return self.reply(403, {'error': 'snapshots are for local pages only'})
             if u.path == '/snapshots':

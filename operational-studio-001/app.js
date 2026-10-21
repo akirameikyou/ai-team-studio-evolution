@@ -17,6 +17,8 @@ const DEFAULT_OBSERVERS = [
 
 let store = { version: 1, cases: {}, order: [], currentId: null, settings: { proxyUrl: '', observers: DEFAULT_OBSERVERS.map(o => ({ ...o })) } };
 let saveBlocked = false, pollTimer = null;
+let freshStore = false;      // 2-E: true when the browser had no saved record at startup (first run, or storage cleared)
+const DEFAULT_RELAY = 'http://127.0.0.1:8787';
 const $ = id => document.getElementById(id);
 // In-page replacements for confirm()/alert(): some embedded browsers ignore the native dialogs.
 function ask(msg, okLabel = 'はい') {
@@ -39,7 +41,7 @@ const obsSetting = name => store.settings.observers.find(o => o.name === name) |
 function load() {
   let raw = null;
   try { raw = localStorage.getItem(KEY); } catch (e) { return block('保存領域を読めません。上書きを防ぐため保存を止めています。'); }
-  if (raw == null) return;
+  if (raw == null) { freshStore = true; return; }
   try {
     const o = JSON.parse(raw);
     if (!o || o.version !== 1 || typeof o.cases !== 'object') throw new Error('format');
@@ -129,6 +131,33 @@ async function restoreFromCopy() {
   if (!save()) { store = prev; render(); return tell('戻した記録を保存できませんでした。今の記録はそのままです（画面の警告を確認してください）。'); }
   render(); schedulePoll();
   tell(`写し ${name} から戻しました（Case ${newCount}件）。`);
+}
+// ---------- 2-E: start configured after the browser's storage was cleared ----------
+// Fetches the default settings from the relay (proxy/studio.config.json; no secrets) and stores them. Cases are never
+// touched. Returns { ok, why }.
+async function loadDefaults(base) {
+  let cfg;
+  try { const r = await fetch((base || DEFAULT_RELAY).replace(/\/$/, '') + '/studio-config'); if (!r.ok) throw new Error('HTTP ' + r.status); cfg = await r.json(); }
+  catch (e) { return { ok: false, why: '中継から初期設定を読めません（' + e.message + '）' }; }
+  const s = StudioText.studioSettingsFrom(cfg);
+  if (s.error) return { ok: false, why: s.error };
+  store.settings.proxyUrl = s.settings.proxyUrl; store.settings.observers = s.settings.observers;
+  if (!save()) return { ok: false, why: '設定を保存できませんでした' };
+  render(); renderBackupNote(); schedulePoll();
+  return { ok: true };
+}
+// On a fresh browser: load the defaults, then offer the newest record copy (if any). Nothing happens on a browser that
+// already has a record, so a person's own settings are never replaced at startup.
+async function initialSetup() {
+  if (!freshStore || saveBlocked) return;
+  let d = await loadDefaults();
+  for (let i = 0; !d.ok && i < 5; i++) { await new Promise(z => setTimeout(z, 2000)); d = await loadDefaults(); }   // the relay may start a moment later
+  if (!d.ok) { $('netNote').textContent = 'なし（' + d.why + '）'; return; }
+  let list = null;
+  try { list = await (await fetch(store.settings.proxyUrl + '/snapshots')).json(); } catch (_) { }
+  if (list && list.snapshots && list.snapshots.length
+      && await ask(`このブラウザには記録がありませんでした。初期設定（中継・各AIの渡し方）を読み込みました。\n\n中継に記録の写しが ${list.total} 件あります（最新 ${list.snapshots[0].name}）。写しから記録を戻しますか？`, '写しを選ぶ'))
+    await restoreFromCopy();
 }
 function pickCopy(list) {
   return new Promise(res => {
@@ -706,6 +735,8 @@ function bind() {
       log(c, '記録JSONから読み込み'); save(); render(); } catch (err) { tell('読み込めません: ' + err.message); } };
   $('settingsBtn').onclick = () => { renderSettings(); $('settings').showModal(); };
   $('restoreBtn').onclick = () => restoreFromCopy();
+  $('defaultsBtn').onclick = async () => { if (!(await ask('中継の初期設定（中継のURL・各AIの渡し方）を読み込み、今の接続設定を置き換えます。記録（Case）は変わりません。', '読み込む'))) return;
+    const d = await loadDefaults(store.settings.proxyUrl || DEFAULT_RELAY); if (!d.ok) return tell(d.why); renderSettings(); tell('初期設定を読み込みました。'); };
   // Save the relay URL as it is typed, so re-rendering the dialog (e.g. adding an AI) never drops it.
   $('proxyUrl').oninput = () => { const v = $('proxyUrl').value.trim(); if (v !== store.settings.proxyUrl) { store.settings.exchangeDir = ''; store.settings.exchangeFor = ''; } store.settings.proxyUrl = v; save(); };
   $('settings').addEventListener('close', () => { save(); render(); renderBackupNote(); schedulePoll(); });
@@ -744,4 +775,4 @@ function caseMd(c) {
   return L.join('\n');
 }
 
-load(); bind(); render(); renderBackupNote(); schedulePoll();
+load(); bind(); render(); renderBackupNote(); schedulePoll(); initialSetup();

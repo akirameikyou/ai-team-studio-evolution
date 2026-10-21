@@ -138,11 +138,28 @@
     return { store: o };
   }
 
+  // 2-E: the default settings served by the relay (proxy/studio.config.json), checked before use. Returns the settings
+  // object to store, or { error }. Only a relay on this machine is accepted; connectors and routes must be known values.
+  const CONNECTORS = ['manual', 'proxy'], ROUTES = ['agent', 'api:openai', 'api:anthropic', 'api:gemini', 'mock', 'manual'];
+  function studioSettingsFrom(cfg) {
+    if (!cfg || typeof cfg !== 'object' || cfg.version !== 1) return { error: '初期設定の形が違います（version 1 ではありません）' };
+    if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/.test(String(cfg.proxyUrl || ''))) return { error: '中継の URL は、このパソコンのもの（127.0.0.1 / localhost）だけを使えます' };
+    if (!Array.isArray(cfg.observers) || !cfg.observers.length) return { error: '観測者の一覧がありません' };
+    const names = new Set(), observers = [];
+    for (const o of cfg.observers) {
+      const name = String((o && o.name) || '').trim();
+      if (!name || names.has(name)) return { error: '観測者の名前が空か重複しています：' + name };
+      if (!CONNECTORS.includes(o.connector) || !ROUTES.includes(o.route)) return { error: name + ' の渡し方が分かりません' };
+      names.add(name); observers.push({ name, connector: o.connector, route: o.route });
+    }
+    return { settings: { proxyUrl: String(cfg.proxyUrl).replace(/\/$/, ''), observers } };
+  }
+
   // A Markdown code fence longer than the longest run of backticks in the text (at least three).
   function fenceFor(text) {
     const runs = String(text == null ? '' : text).match(/`+/g) || [];
     return '`'.repeat(Math.max(3, ...runs.map(r => r.length + 1)));
   }
 
-  global.StudioText = { extractSources, splitDifferences, LAYERS, relaySafeName, relayPaths, agentInstruction, TEXT_KIND, TEXT_MAX, textSource, sourceBodies, isDuplicateText, fenceFor, caseIdFor, parseStoreSnapshot };
+  global.StudioText = { extractSources, splitDifferences, LAYERS, relaySafeName, relayPaths, agentInstruction, TEXT_KIND, TEXT_MAX, textSource, sourceBodies, isDuplicateText, fenceFor, caseIdFor, parseStoreSnapshot, studioSettingsFrom };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

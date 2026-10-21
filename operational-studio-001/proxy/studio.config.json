@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "note": "Default Studio settings served by the relay (GET /studio-config). Applied when the browser has no saved record, or by 「初期設定に戻す」. No secrets here: API keys stay in proxy/.env.",
+  "proxyUrl": "http://127.0.0.1:8787",
+  "observers": [
+    { "name": "GPT", "connector": "proxy", "route": "agent" },
+    { "name": "Claude Code", "connector": "manual", "route": "agent" },
+    { "name": "Gemini", "connector": "proxy", "route": "api:gemini" },
+    { "name": "Codex", "connector": "proxy", "route": "agent" },
+    { "name": "Meta", "connector": "manual", "route": "manual" }
+  ]
+}

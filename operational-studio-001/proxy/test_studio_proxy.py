@@ -259,6 +259,21 @@ class RelayFileTests(unittest.TestCase):
         for name in ('../secret.json', 'secret.json', 'ats-store-x.json', ''):
             self.assertEqual(self.get_status('/snapshot', name=name)[0], 404, name)
 
+    def test_studio_config_is_served_from_the_file_next_to_the_relay(self):
+        code, cfg = self.get_status('/studio-config')
+        self.assertEqual(code, 200)
+        on_disk = json.loads((Path(sp.__file__).parent / 'studio.config.json').read_text(encoding='utf-8'))
+        self.assertEqual(cfg, on_disk)
+        self.assertEqual(cfg['version'], 1)
+        text = json.dumps(cfg)
+        self.assertNotIn('API_KEY', text)          # no secrets in the defaults (keys stay in proxy/.env)
+        self.assertNotIn('AIza', text)
+        self.assertEqual(set(cfg), {'version', 'note', 'proxyUrl', 'observers'})
+
+    def test_studio_config_missing_answers_404(self):
+        with mock.patch.object(sp, 'HERE', self.ex):
+            self.assertEqual(self.get_status('/studio-config')[0], 404)
+
     def test_unsafe_path_parts_are_refused_and_nothing_is_written(self):
         r = self.post({'case': '..', 'task': 'T', 'to': 'GPT', 'route': 'agent', 'packet': 'p'})
         self.assertEqual(r['status'], 500)

@@ -223,6 +223,17 @@ test('T-08 記録の写しを読み戻すときの確認（2-C）', () => {
   check(T.parseStoreSnapshot(JSON.stringify({ ...ok, order: ['A', 'B'] })).error, '一覧にあるのに記録がない Case があれば使わない');
 });
 
+test('T-09 中継が配る初期設定の確認（2-E）', () => {
+  const ok = { version: 1, proxyUrl: 'http://127.0.0.1:8787/', observers: [{ name: 'GPT', connector: 'proxy', route: 'agent' }, { name: 'Meta', connector: 'manual', route: 'manual' }] };
+  const r = T.studioSettingsFrom(ok);
+  check(!r.error && r.settings.proxyUrl === 'http://127.0.0.1:8787' && r.settings.observers.length === 2, '正しい初期設定は使える（URL の末尾の / は外す）');
+  check(T.studioSettingsFrom({ ...ok, proxyUrl: 'https://example.com' }).error, 'このパソコン以外の中継は使わない');
+  check(T.studioSettingsFrom({ ...ok, version: 2 }).error, 'version が 1 でなければ使わない');
+  check(T.studioSettingsFrom({ ...ok, observers: [{ name: 'GPT', connector: 'proxy', route: 'agent' }, { name: 'GPT', connector: 'manual', route: 'manual' }] }).error, '同じ名前の観測者が2つあれば使わない');
+  check(T.studioSettingsFrom({ ...ok, observers: [{ name: 'X', connector: 'shell', route: 'agent' }] }).error, '知らない渡し方は使わない');
+  check(T.studioSettingsFrom({ ...ok, observers: [] }).error, '観測者が空なら使わない');
+});
+
 test('T-06 結果ファイルは一時ファイルに書いてから名前を変えるよう頼む', () => {
   const p = T.relayPaths('C:/x/exchange', 'C1', 'C1-OBS-Codex', 'Codex');
   const s = T.agentInstruction(p);
