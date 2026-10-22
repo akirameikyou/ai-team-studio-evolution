@@ -199,11 +199,95 @@ class RunnerTest(unittest.TestCase):
         self.assertNotIn('日本語の問い', log); self.assertNotIn(R.PREAMBLE.splitlines()[0], log)   # the request is not logged
         self.assertNotIn('session id', log)
 
-    def test_r5_a_failure_logs_error_lines_but_not_the_request(self):
+    def test_r3b_a_failure_logs_only_kinds_of_errors_never_their_text(self):
+        # 3-1-r3: an ERROR line may carry anything (a token, a path, command output): only its kind is kept.
         self.fake('fail')
         d = self.task('CASE-X-OBS-Codex'); self.run_(d)
-        log = self.log(d)
-        self.assertIn('ERROR: fake failure', log); self.assertNotIn('日本語の問い', log)
+        log, claim = self.log(d), json.dumps(self.claim(d), ensure_ascii=False)
+        for leak in ('fake failure', 'SECRET-TOKEN-123', 'C:\\private', '日本語の問い'):
+            self.assertNotIn(leak, log, leak); self.assertNotIn(leak, claim, leak)
+        self.assertIn('エラーの種類: auth, other', log); self.assertIn('ERROR 行 2 件', log)
+
+    def test_r3b_error_kinds(self):
+        self.assertEqual(R.error_kinds('ERROR: 401 Unauthorized\nerror: stream disconnected (connection reset)\nERROR: rate limit 429\n'
+                                       'ERROR: sandbox denied\nERROR: model not found\nERROR: something else\nINFO: fine\n'),
+                         (['auth', 'network', 'rate', 'sandbox', 'model', 'other'], 6))
+        self.assertEqual(R.error_kinds('no errors here\n'), ([], 0))
+
+    # --- 3-1-r3: --once / --watch check the place too ---
+    def test_r3a_once_and_watch_skip_folders_reached_through_a_link(self):
+        ok = self.task('CASE-X-OBS-Codex'); linked = self.task('CASE-L-OBS-Codex', case='CASE-L')
+        real = Path.is_symlink
+        with mock.patch.object(Path, 'is_symlink', lambda p: p.name == 'CASE-L' or real(p)):
+            self.assertEqual(R.waiting_tasks(self.ex), [ok])
+            R.main(['--codex', str(HERE / 'fake_codex.py'), '--exchange', str(self.ex), '--repo', self.tmp.name, '--once'])
+        self.assertEqual(len(self.calls()), 1)
+        self.assertTrue((ok / 'from-Codex.md').exists()); self.assertFalse((linked / R.CLAIM).exists())
+
+    # --- 3-1-r3: after the reply is published, a failing record never turns it into "failed" (S1-2) ---
+    def test_r3c_a_failing_log_after_publishing_keeps_the_done_claim(self):
+        d = self.task('CASE-X-OBS-Codex')
+        real = R.log
+        def flaky(task_dir, text):
+            if 'を書きました' in text:
+                raise OSError('disk full')
+            return real(task_dir, text)
+        with mock.patch.object(R, 'log', side_effect=flaky):
+            self.assertEqual(self.run_(d), 'published')
+        c = self.claim(d)
+        self.assertEqual(c['state'], 'done'); self.assertEqual(c['replySha256'], sha((d / 'from-Codex.md').read_bytes()))
+        self.assertIn('OSError', c['recordError'])
+
+    def test_r3c_a_failing_done_claim_is_written_again_with_the_error(self):
+        d = self.task('CASE-X-OBS-Codex')
+        real, seen = R.write_claim, []
+        def flaky(task_dir, state, **extra):
+            seen.append(state)
+            if state == 'done' and seen.count('done') == 1:
+                raise PermissionError('claim locked')
+            return real(task_dir, state, **extra)
+        with mock.patch.object(R, 'write_claim', side_effect=flaky):
+            self.assertEqual(self.run_(d), 'published')
+        c = self.claim(d)
+        self.assertEqual(c['state'], 'done'); self.assertIn('PermissionError', c['recordError'])
+        self.assertTrue((d / 'from-Codex.md').exists()); self.assertNotIn('failed', seen)
+
+    def test_r3c_a_temporary_file_that_cannot_be_removed_after_publishing_is_noted_not_failed(self):
+        d = self.task('CASE-X-OBS-Codex')
+        with mock.patch.object(R.os, 'unlink', side_effect=PermissionError('in use')):
+            self.assertEqual(self.run_(d), 'published')
+        c = self.claim(d)
+        self.assertEqual(c['state'], 'done'); self.assertTrue(c['tmpLeft'])
+        self.assertEqual((d / 'from-Codex.md').read_bytes(), self.reply.encode('utf-8'))
+
+    def test_r3c_the_conflict_record_survives_a_failing_log_too(self):
+        self.fake('person-first')
+        d = self.task('CASE-X-OBS-Codex')
+        real = R.log
+        with mock.patch.object(R, 'log', side_effect=lambda t, x: (_ for _ in ()).throw(OSError('x')) if '置きました' in x else real(t, x)):
+            self.assertEqual(self.run_(d), 'conflict')
+        c = self.claim(d)
+        self.assertEqual(c['state'], 'conflict'); self.assertEqual(c['saved'], R.CONFLICT); self.assertIn('recordError', c)
+
+    def test_r3d_a_failing_log_keeps_the_original_reason_of_a_failed_run(self):
+        # The reason Codex failed (exit code) must survive a log that cannot be written; the log error is added beside it.
+        self.fake('fail')
+        d = self.task('CASE-X-OBS-Codex')
+        real = R.log
+        with mock.patch.object(R, 'log', side_effect=lambda t, x: (_ for _ in ()).throw(OSError('log locked')) if x.startswith('失敗: ') else real(t, x)):
+            self.assertEqual(self.run_(d), 'failed')
+        c = self.claim(d)
+        self.assertEqual(c['state'], 'failed'); self.assertEqual(c['reason'], '終了コード 3')
+        self.assertIn('OSError', c['recordError']); self.assertIn('condition', c); self.assertIsInstance(c['seconds'], int)
+        self.assertFalse((d / R.TMP).exists()); self.assertFalse((d / 'from-Codex.md').exists())
+
+    def test_r3c_the_error_handler_itself_never_raises(self):
+        d = self.task('CASE-X-OBS-Codex')
+        with mock.patch.object(R.os, 'link', side_effect=OSError('no links here')), \
+             mock.patch.object(R, 'write_claim', side_effect=OSError('claim locked')), \
+             mock.patch.object(R, 'log', side_effect=OSError('log locked')):
+            self.assertEqual(self.run_(d), 'failed')          # returns instead of raising
+        self.assertFalse((d / 'from-Codex.md').exists())
 
     # --- environment (R6) ---
     def test_r6_codex_gets_only_the_allowed_environment(self):

@@ -24,7 +24,8 @@ sys.stderr.buffer.write(('OpenAI Codex (fake)\n--------\nworkdir: x\nmodel: fake
 out = args[args.index('-o') + 1]
 mode = cfg.get('mode', 'ok')
 if mode == 'fail':
-    sys.stderr.buffer.write(b'ERROR: fake failure\n')
+    # error lines that carry text which must never reach the log (a token, a private path)
+    sys.stderr.buffer.write(b'ERROR: fake failure 401 unauthorized SECRET-TOKEN-123\nERROR: fake failure C:\\private\\notes.txt\n')
     sys.exit(3)
 if mode == 'slow':
     time.sleep(30)

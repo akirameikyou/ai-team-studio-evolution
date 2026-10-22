@@ -25,7 +25,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 DEFAULT_EXCHANGE = HERE / 'exchange'
 DEFAULT_REPO = HERE.parent.parent          # the repository root: Codex reads the code it is asked about from here
-RUNNER_VERSION = 'codex_runner 0.3'
+RUNNER_VERSION = 'codex_runner 0.4'
 PREAMBLE_VERSION = 'P1'                    # change this name whenever PREAMBLE changes (it is recorded as a condition)
 AI = 'Codex'
 CLAIM, LOG = '.codex-run', 'codex-run.log'
@@ -119,9 +119,21 @@ def header_lines(stderr):
     return lines
 
 
-def error_lines(stderr):
-    """On failure: lines Codex marks as errors (never the request, which Codex repeats after its header)."""
-    return [l.strip()[:300] for l in stderr.splitlines() if re.match(r'^\s*(ERROR|error)\b', l)][:5]
+# 3-1-r3: an error line may carry anything (a token, a path, command output), so only its kind is recorded.
+ERROR_KINDS = (('auth', r'\b(401|403)\b|unauthori[sz]ed|login|auth'), ('network', r'time(d)?\s*out|connection|network|dns|disconnect'),
+               ('rate', r'\b429\b|rate.?limit|quota'), ('sandbox', r'sandbox|permission denied|access is denied|アクセスが拒否'),
+               ('model', r'\bmodel\b'))
+
+
+def error_kinds(stderr):
+    """On failure: (the kinds of the lines Codex marks as errors, in a fixed order; how many such lines). Never their text."""
+    found, n = set(), 0
+    for line in stderr.splitlines():
+        if not re.match(r'^\s*(ERROR|error)\b', line):
+            continue
+        n += 1
+        found.add(next((k for k, pat in ERROR_KINDS if re.search(pat, line, re.I)), 'other'))
+    return [k for k in [k for k, _ in ERROR_KINDS] + ['other'] if k in found], n
 
 
 def condition(codex, effort, header=()):
@@ -138,7 +150,8 @@ def waiting_tasks(exchange):
     for d in sorted(Path(exchange).glob('*/*')):
         if not d.is_dir() or d.parent.name.startswith('_') or not AUTO_TASK.search(d.name):
             continue
-        if (d / f'to-{AI}.md').is_file() and not (d / f'from-{AI}.md').exists() and not (d / CLAIM).exists():
+        if (d / f'to-{AI}.md').is_file() and not (d / f'from-{AI}.md').exists() and not (d / CLAIM).exists() \
+                and task_problem(d, exchange) is None:     # 3-1-r3: --once / --watch check the place as --task does
             out.append(d)
     return out
 
@@ -190,7 +203,28 @@ def log(task_dir, text):
 def publish(tmp, dest):
     """R1: give tmp the name dest only if dest does not exist yet (a hard link never replaces a file), then drop tmp."""
     os.link(tmp, dest)
-    os.unlink(tmp)
+    try:
+        os.unlink(tmp)
+        return True
+    except OSError:      # 3-1-r3: the reply is published; a temporary file left behind is noted, not a failure
+        return False
+
+
+def record_outcome(task_dir, state, message, **fields):
+    """3-1-r3 (S1-2): the claim must keep the outcome of a run (done / conflict / failed, with its reason) even if
+    writing the claim or the log fails. Such a failure is added to the claim as recordError (one more try); it never
+    changes the state or replaces the reason."""
+    try:
+        write_claim(task_dir, state, **fields)
+        log(task_dir, message)
+    except Exception as e:
+        err = f'{type(e).__name__}: {str(e)[:150]}'
+        for step in (lambda: write_claim(task_dir, state, recordError=err, **fields),
+                     lambda: log(task_dir, f'{message}（記録の一部に失敗: {err}）')):
+            try:
+                step()
+            except Exception:
+                pass
 
 
 def run_task(task_dir, codex, repo, timeout, dry_run=False, effort=None):
@@ -218,10 +252,14 @@ def run_task(task_dir, codex, repo, timeout, dry_run=False, effort=None):
         return _run_claimed(task_dir, codex, args, packet, since, timeout, effort, from_file, tmp)
     except Exception as e:   # S1-4: whatever happens, the claim does not stay "running" and no temporary file is left
         reason = f'{type(e).__name__}: {str(e)[:150]}'
-        write_claim(task_dir, 'failed', since=since, reason=reason)
-        log(task_dir, '失敗（予期しないエラー）: ' + reason)
-        if tmp.exists():
-            tmp.unlink()
+        # 3-1-r3: each step on its own, and none of them may raise (a failing handler would leave "running" behind)
+        for step in (lambda: write_claim(task_dir, 'failed', since=since, reason=reason),
+                     lambda: log(task_dir, '失敗（予期しないエラー）: ' + reason),
+                     lambda: tmp.unlink() if tmp.exists() else None):
+            try:
+                step()
+            except Exception:
+                pass
         return 'failed'
 
 
@@ -246,33 +284,41 @@ def _run_claimed(task_dir, codex, args, packet, since, timeout, effort, from_fil
     reply = tmp.read_bytes() if tmp.exists() else b''
     if code != 0 or not reply.strip():
         reason = f'時間切れ（{timeout} 秒）' if timed_out else (f'終了コード {code}' if code != 0 else '返事が空')
-        write_claim(task_dir, 'failed', since=since, reason=reason, seconds=secs, condition=cond)
-        log(task_dir, f'失敗: {reason}（{secs} 秒）' + ''.join(f'\n  {l}' for l in error_lines(err)))
-        if tmp.exists():
-            tmp.unlink()
+        kinds, n = error_kinds(err)
+        record_outcome(task_dir, 'failed', f'失敗: {reason}（{secs} 秒）'
+                       + (f'\n  エラーの種類: {", ".join(kinds)}（ERROR 行 {n} 件。内容は記録しない）' if n else ''),
+                       since=since, reason=reason, seconds=secs, condition=cond)
+        try:
+            if tmp.exists():
+                tmp.unlink()
+        except OSError:
+            pass
         return 'failed'
     digest = sha256(reply)
     note = '' if re.search(r'TASK:\s*' + re.escape(task_dir.name) + r'\s', reply.decode('utf-8', errors='replace')) \
         else '（注意: 返事に TASK の一致する行がありません。判定はスタジオに任せます）'
     try:
-        publish(tmp, from_file)          # fails if from-Codex.md appeared meanwhile: never overwrite a person's reply
+        removed = publish(tmp, from_file)   # fails if from-Codex.md appeared meanwhile: never overwrite a person's reply
     except FileExistsError:
         for k in range(1, MAX_CONFLICT + 1):
             name = CONFLICT if k == 1 else f'from-{AI}.runner-{k}.md'
             try:
-                publish(tmp, task_dir / name)
+                removed = publish(tmp, task_dir / name)
                 break
             except FileExistsError:
                 continue
         else:
             raise OSError(f'退避先を作れません（{CONFLICT} から -{MAX_CONFLICT} まで使用中）')
-        write_claim(task_dir, 'conflict', since=since, seconds=secs, saved=name, savedSha256=digest, condition=cond,
-                    reason=f'from-{AI}.md が先にありました。実行係の返事は {name} にあります')
-        log(task_dir, f'from-{AI}.md が先にあったので、返事は {name} に置きました（{secs} 秒）')
+        left = {} if removed else {'tmpLeft': True}
+        record_outcome(task_dir, 'conflict', f'from-{AI}.md が先にあったので、返事は {name} に置きました（{secs} 秒）',
+                         since=since, seconds=secs, saved=name, savedSha256=digest, condition=cond,
+                         reason=f'from-{AI}.md が先にありました。実行係の返事は {name} にあります', **left)
         return 'conflict'
     # The claim stays as a record of the run (done, the hash of what was published, the conditions).
-    write_claim(task_dir, 'done', since=since, seconds=secs, replySha256=digest, condition=cond)
-    log(task_dir, f'from-{AI}.md を書きました（{len(reply)} バイト, {secs} 秒）{note}')
+    left = {} if removed else {'tmpLeft': True}
+    record_outcome(task_dir, 'done', f'from-{AI}.md を書きました（{len(reply)} バイト, {secs} 秒）{note}'
+                     + ('' if removed else f'（一時ファイル {TMP} を消せませんでした）'),
+                     since=since, seconds=secs, replySha256=digest, condition=cond, **left)
     return 'published'
 
 

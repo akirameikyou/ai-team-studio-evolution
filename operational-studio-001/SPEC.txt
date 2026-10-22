@@ -1,4 +1,4 @@
-状態: 仕様書 v0.10（正本・Codex 再監査前）／ 段階3-1-r2（監査対応）を §14 の X-9〜X-16 に追加。段階3-1は v0.9、それより前は v0.8 r2 のまま
+状態: 仕様書 v0.11（正本・Codex 再監査前）／ 段階3-1-r3（再監査・第1段への対応）を §14 の X-17〜X-19 に追加、X-1・X-14 を改訂。3-1-r2 は v0.10、段階3-1は v0.9、それより前は v0.8 r2 のまま
 sender: CLAUDE_CODE
 件名: AI Team Studio（operational-studio-001 系）仕様書 ― 解析・状態・依頼記録・回収・送付・文字列処理の正本（版は「状態」の行と改訂の履歴で示す）
 作成: 2026-10-15（v0.6）。計画 P1（文書の一本化）。ユーザーの依頼「GPTと検討のうえ進行」と、GPT との合意（10/15）による。
@@ -250,7 +250,7 @@ sender: CLAUDE_CODE
 
 14. Codex 実行係（段階3-1。proxy/codex_runner.py）
  決定（2026-10-21 ユーザー）：設計案 v0.1 の推奨どおり。D1＝条件を記録する、D4＝失敗の印は人が消す、D5＝自動の対象は観測と統合だけ。段階3-1は表示だけで、実行係を起動するのは人（または人が頼んだ Claude）。
- X-1 実行係は exchange/<CASE>/<TASK>/ の to-Codex.md を codex exec に渡す（読み取り専用・承認なし・--ephemeral・依頼文は標準入力。前置き P1 を付ける）。Codex にはファイルを書かせない。返事は一時ファイル .from-Codex.md.runner.tmp に書き、os.rename で from-Codex.md にする。from-Codex.md が先にあれば上書きせず from-Codex.runner.md に置く（衝突）。
+ X-1 実行係は exchange/<CASE>/<TASK>/ の to-Codex.md を codex exec に渡す（読み取り専用・承認なし・--ephemeral・依頼文は標準入力。前置き P1 を付ける）。Codex にはファイルを書かせない。返事は一時ファイル .from-Codex.md.runner.tmp に書き、ハードリンク（os.link。宛先があれば失敗し、上書きしない）で from-Codex.md として公開してから一時ファイルを消す（X-9。3-1 の os.rename から 3-1-r2 で変更）。from-Codex.md が先にあれば上書きせず from-Codex.runner.md（すでにあれば -2 … -99）に置く（衝突）。
  X-2 対象は Task 名が -OBS-Codex[-n] か -SYN[-n] のフォルダだけ。実行（-NEXT・-IMPL）は対象外。依頼文の TASK がフォルダ名と違えば送らない。
  X-3 印 .codex-run（JSON）を新規作成のみで作り、二重実行を防ぐ。state は running → done／failed／conflict。印は実行の後も残す（done は条件の記録）。failed・conflict の印がある間は、実行係はその依頼をもう一度は実行しない。消すのは人。
  X-4 条件 condition＝{ route: runner, runner: 版, preamble: 前置きの版, codex: codex --version, sandbox: read-only, effort: 推論の強さ（指定なしは default） }。
@@ -265,9 +265,13 @@ sender: CLAUDE_CODE
  X-11（R2・G1）スタジオは check が match のときだけ受信の記録に runner＝{ condition, seconds, check } を付ける。それ以外（check が無い古い中継を含む）は runnerCheck＝mismatch／unverifiable だけを記録し、確認の項目 RUNNER_UNVERIFIED を必須にする（studio_state.js。parse_v2.js の規則には足さない）。採用の規則は変えない：採用はするが、確認するまで利用不可（統合・判断に使えない）。観測・統合の欄に「一致しません／照合できません」と出す。ハッシュは中身が同じかを確かめるだけで、誰が書いたかの証明ではない（印と返事の両方を書き換えられる者は見分けられない）。
  X-12（R3）--task は受け渡しフォルダの中の <CASE>/<TASK> だけを受け付け、途中のリンクを拒む。依頼文は見出し（最初の空でない行）だけを照合し、CASE・TASK・TO がちょうど1つずつあって、CASE＝親フォルダ名、TASK＝フォルダ名、TO＝Codex でなければ送らない。本文の TASK（返事の見本ブロック）は見ない。
  X-13（R4）--effort は low・medium・high・xhigh・max だけ（models_cache.json の supported_reasoning_levels）。ほかは実行しない。
- X-14（R5）codex-run.log に、起動引数（依頼文は標準入力なので含まれない）・開始時刻・秒数・終了コード・時間切れ・stderr の見出しの model・reasoning effort・sandbox・approval の行を残す。見出しより後（依頼文の再掲）と session id は残さない。失敗のときは ERROR／error で始まる行を5行まで。印の condition に modelReported・effortReported を足す（中継はこの2つも返す）。表示 high は値が渡ったことを示すだけで、回答の質への効果の証明ではない。
+ X-14（R5）codex-run.log に、起動引数（依頼文は標準入力なので含まれない）・開始時刻・秒数・終了コード・時間切れ・stderr の見出しの model・reasoning effort・sandbox・approval の行を残す。見出しより後（依頼文の再掲）と session id は残さない。失敗のときは ERROR／error で始まる行の種類（auth・network・rate・sandbox・model・other）と件数だけを残し、行の中身は残さない（X-18。3-1-r2 の「5行まで残す」から 3-1-r3 で変更）。印の condition に modelReported・effortReported を足す（中継はこの2つも返す）。表示 high は値が渡ったことを示すだけで、回答の質への効果の証明ではない。
  X-15（R6）Codex は許可した環境変数だけで起動する（ENV_ALLOW：SYSTEMROOT・PATH・TEMP・USERPROFILE・LOCALAPPDATA・APPDATA・CODEX_HOME など、秘密を含まない系統の変数）。中継が .env から読んだ API キーなどは Codex に渡らない。
  X-16（A1・保護 P1。コードの外）運用中の proxy\.env には CodexSandboxUsers の読み取り拒否（icacls /deny）を付けた。.env を作り直すと消えることがあるので、作り直したら確かめる。調査と結果は「A1_アクセス範囲調査_結果.md」。
+ ── 3-1-r3（2026-10-22。48eb75e の再監査・第1段の指摘への対応）──
+ X-17（再監査 高）--once・--watch の対象選び（waiting_tasks）にも、--task と同じ場所の確認（task_problem：受け渡しフォルダの中の <CASE>/<TASK> であり、途中にリンクがない）を通す。通らないフォルダは対象にしない（印も作らない）。
+ X-18（再監査 中）失敗のときのログには、ERROR／error で始まる行の種類（auth・network・rate・sandbox・model・other。決まった語の検索で分ける）と件数だけを書く。行の中身（トークン・パス・コマンドの出力が混ざりうる）はログにも印にも残さない。
+ X-19（再監査 中・S1-2）返事を公開した後は、印の更新やログの書き込みが失敗しても、状態を failed にしない。印にもう一度 done／conflict を書き、失敗の内容を recordError に残す（それも失敗すれば何もしない）。公開した後に一時ファイルを消せなかったときは、失敗ではなく tmpLeft: true を印に残す。Codex 自体が失敗した（終了コード・空の返事・時間切れ）ときも同じで、ログが書けなくても印の state と reason（本来の失敗の理由）は変えず、recordError を足すだけにする。公開の前の予期しない例外の処理（印を failed・ログ・一時ファイルの削除）は、1つずつ行い、どれかが失敗しても例外を外へ出さない。
 
 ════════════════════════════════════════
 第II部　実装・試験との対応（事実。2026-10-15 時点）
@@ -347,6 +351,7 @@ C. 仕様と実装・文書の不一致（P1 の一覧。対応する段階）
  12. NEXT_TASK を画面で直せない。今回は GATE 理由で補えたが、編集機能が要らないということではない（GPT）。→ 保留
 
 改訂の履歴
+ v0.11（2026-10-22）：段階3-1-r3。§14 に X-17〜X-19。X-1 の公開方式をハードリンクに直した（再監査の文書の指摘）。X-14 の失敗時のログを、行の中身から種類と件数に変えた。第II部・第III部は未更新。
  v0.10（2026-10-21）：段階3-1-r2。§14 に X-9〜X-16（R1〜R6・保護 P1）。X-5 の項目に modelReported・effortReported、/result に check。X-8 の条件の記録は X-11 の照合が match のときだけ。第II部・第III部は未更新（README・TEST_REPORT に記載）。
  v0.9（2026-10-21）：段階3-1。§14（Codex 実行係 X-1〜X-8）を新設。中継の /result に runner を追加。受信の記録に任意の項目 runner を追加。第II部・第III部は未更新（段階3-1の対応は README と TEST_REPORT に記載）。
  v0.8 r2（2026-10-15）：Codex C52 に対応。第II部の対応表を更新（削除した isAgent・agentPaths を agentTarget などに、1c を Q-08・C-11 まで）。
