@@ -177,3 +177,13 @@ Codex の環境は localhost に接続できないため、規則の試験は No
 - 差分を読み直して見つけた見落とし：Codex 自体が失敗したときに、ログが書けないと、外側の例外処理が印の reason を「ログを書けなかった」に上書きし、本来の理由（終了コード）が消えていた。試験（r3d）を足して失敗を確かめてから、失敗の経路も同じ記録の関数（record_outcome）を通すように直した。
 - 直した後：`test_codex_runner` 26件・`test_studio_proxy` 36件、合計62件 OK（シンボリックリンクを作る1件は従来どおり skip）。スタジオの画面のコード（app.js・studio_*.js）は変えていないので、ブラウザの試験は回していない。
 - 残っているもの（再監査で挙がったが、今回の範囲外）：プロキシの環境変数（要判断）、PATH などの値の扱い、見出しの境界（全角記号・空白）の試験、-99 まで埋まった場合・同時実行の試験、新しい関数の変異試験、A6（子プロセス。段階3-2の前提）。
+
+## 追記：利用者による試験の独立実行（2026-10-22、09ba692）
+
+Claude Code 以外の手で動かした、最初の試験の結果。Claude Code の自己報告とは分けて記録する。
+
+- 実行者：利用者（自分の PowerShell のターミナル）。Claude Code は、コマンドを示し、ターミナルの表示を読み取っただけ。
+- 版：`09ba692 (HEAD -> feature/operational-studio-005)`。Python 3.12.10。
+- コマンド：`python -X utf8 -m unittest discover -s C:/GitHub/ai-team-studio-evolution-005/operational-studio-001/proxy -p "test_*.py" -v`
+- 結果：**Ran 62 tests in 23.759s、OK (skipped=1)**。skip の1件は、シンボリックリンクを実際に作る試験（WinError 1314：特権がない）で、これまでと同じ。
+- 参考：同じ日、Codex Desktop にも同じ試験の実行を頼んだが、サンドボックスでソケットが禁止され（WinError 10013）、ハードリンクも作れないとみられ、failures 9・errors 43 で、独立の確認にはならなかった（環境の制約）。
