@@ -19,7 +19,7 @@ with open(os.path.join(work, 'calls.jsonl'), 'a', encoding='utf-8') as f:
     f.write(json.dumps({'args': args, 'stdin': stdin.decode('utf-8'), 'env': sorted(os.environ)}, ensure_ascii=False) + '\n')
 effort = next((a.split('=', 1)[1].strip('"') for a in args if a.startswith('model_reasoning_effort=')), 'none')
 sys.stderr.buffer.write(('OpenAI Codex (fake)\n--------\nworkdir: x\nmodel: fake-model\nprovider: openai\napproval: never\n'
-                         f'sandbox: read-only\nreasoning effort: {effort}\nsession id: 0000\n--------\nuser\n').encode('utf-8')
+                         f'sandbox: {args[args.index("-s") + 1]}\nreasoning effort: {effort}\nsession id: 0000\n--------\nuser\n').encode('utf-8')
                         + stdin + b'\ncodex\nworking\n')
 out = args[args.index('-o') + 1]
 mode = cfg.get('mode', 'ok')

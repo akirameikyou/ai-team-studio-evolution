@@ -54,6 +54,82 @@ class RunnerTest(unittest.TestCase):
         claimed = self.task('CASE-Z-OBS-Codex', case='CASE-Z'); (claimed / R.CLAIM).write_text('{}')
         self.assertEqual(set(R.waiting_tasks(self.ex)), {obs, syn, syn2})
 
+    def test_impl_requires_task_write_explicit_repo_and_git_worktree(self):
+        d = self.task('CASE-X-IMPL-Codex')
+        with self.assertRaises(SystemExit):
+            R.main(['--codex', str(HERE / 'fake_codex.py'), '--exchange', str(self.ex), '--task', str(d)])
+        self.assertEqual(self.calls(), [])
+        with self.assertRaises(SystemExit):
+            R.main(['--codex', str(HERE / 'fake_codex.py'), '--exchange', str(self.ex), '--task', str(d), '--write'])
+        self.assertEqual(self.calls(), [])
+        R.main(['--codex', str(HERE / 'fake_codex.py'), '--exchange', str(self.ex), '--repo', self.tmp.name,
+                '--task', str(d), '--write'])
+        self.assertEqual(self.calls(), [])
+        claim = self.claim(d)
+        self.assertEqual(claim['state'], 'failed'); self.assertEqual(claim['gitRecord'], '記録できなかった')
+        self.assertIn('記録できなかった', self.log(d))
+
+    def test_impl_is_not_picked_by_once_watch_or_dry_run_and_dry_run_explains_write(self):
+        impl = self.task('CASE-X-IMPL-Codex')
+        obs = self.task('CASE-X-OBS-Codex')
+        self.assertEqual(R.waiting_tasks(self.ex), [obs])
+        R.main(['--codex', str(HERE / 'fake_codex.py'), '--exchange', str(self.ex), '--repo', self.tmp.name, '--once'])
+        self.assertFalse((impl / R.CLAIM).exists())
+        self.assertEqual(len(self.calls()), 1)
+        prior_calls = len(self.calls())
+        (self.ex / R.STOP).write_text('', encoding='utf-8')
+        R.main(['--codex', str(HERE / 'fake_codex.py'), '--exchange', str(self.ex), '--repo', self.tmp.name, '--watch', '1'])
+        self.assertFalse((impl / R.CLAIM).exists())
+        self.assertEqual(len(self.calls()), prior_calls)
+        from contextlib import redirect_stdout
+        import io
+        output = io.StringIO()
+        with redirect_stdout(output):
+            R.main(['--codex', str(HERE / 'fake_codex.py'), '--exchange', str(self.ex), '--dry-run'])
+        self.assertIn('--write', output.getvalue())
+        self.assertEqual(len(self.calls()), prior_calls)
+
+    def make_git_repo(self):
+        repo = Path(self.tmp.name) / 'repo'; repo.mkdir()
+        def git(*args):
+            return __import__('subprocess').run(['git', '-C', str(repo), *args], capture_output=True, check=True)
+        git('init', '-q')
+        git('config', 'user.name', 'Test'); git('config', 'user.email', 'test@example.invalid')
+        (repo / 'base.txt').write_text('base', encoding='utf-8')
+        git('add', 'base.txt'); git('commit', '-qm', 'initial')
+        (repo / 'fake.json').write_text(json.dumps({'mode': 'ok', 'reply': self.reply}), encoding='utf-8')
+        self.rec = repo / 'calls.jsonl'
+        return repo
+
+    def test_impl_uses_workspace_write_and_records_git_before_after(self):
+        repo = self.make_git_repo()
+        d = self.task('CASE-X-IMPL-Codex')
+        R.main(['--codex', str(HERE / 'fake_codex.py'), '--exchange', str(self.ex), '--repo', str(repo),
+                '--task', str(d), '--write'])
+        (call,) = self.calls()
+        args = call['args']
+        self.assertEqual(args[args.index('-s') + 1], 'workspace-write')
+        self.assertIn('approval_policy="never"', args)
+        self.assertIn(R.PREAMBLE_IMPL, call['stdin'])
+        claim = self.claim(d)
+        self.assertEqual(claim['condition']['sandbox'], 'workspace-write')
+        self.assertEqual(claim['condition']['preamble'], R.PREAMBLE_IMPL_VERSION)
+        self.assertIn('gitBefore', claim); self.assertIn('gitAfter', claim)
+        self.assertEqual(claim['gitBefore']['head'], claim['gitAfter']['head'])
+        self.assertIn('HEAD', self.log(d)); self.assertIn('status', self.log(d))
+
+    def test_impl_records_head_change_warning(self):
+        repo = self.make_git_repo()
+        d = self.task('CASE-X-IMPL-Codex')
+        before = {'head': 'a' * 40, 'status': []}
+        after = {'head': 'b' * 40, 'status': ['changed.txt']}
+        with mock.patch.object(R, 'git_snapshot', side_effect=[before, after]):
+            self.assertEqual(R.run_task(d, FAKE, repo, 60, write=True), 'published')
+        claim = self.claim(d)
+        self.assertIn('HEAD が実行前後で変化', claim['gitWarning'])
+        self.assertIn('警告: HEAD が変化', self.log(d))
+        self.assertEqual(claim['changedFiles'], ['changed.txt'])
+
     # --- publishing (R1, R2, S1) ---
     def test_reply_is_published_byte_for_byte_and_the_claim_records_the_run_and_its_hash(self):
         d = self.task('CASE-X-OBS-Codex')
