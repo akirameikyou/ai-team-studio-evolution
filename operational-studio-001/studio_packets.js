@@ -4,8 +4,17 @@
 // Depends on StudioState (eligibleObservers, synTaskId) and StudioText (TEXT_KIND, sourceBodies).
 (function (global) {
   const ORIGINS = ['SOURCE', 'CONTEXT', 'STATE', 'OBSERVER', 'EVIDENCE', 'REASONING', 'JUDGMENT'];
+  const SYNTHESIS_BODY_MAX_CHARS = 30000;
   const hm = iso => iso ? iso.slice(5, 16).replace('T', ' ') : '';
   const oneLine = s => String(s || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+
+  function observerBody(raw) {
+    const text = String(raw == null ? '' : raw);
+    const start = text.lastIndexOf('[STUDIO_RESULT]');
+    if (start < 0) return text.trim();
+    const close = text.indexOf('[/STUDIO_RESULT]', start);
+    return close < 0 ? text.trim() : (text.slice(0, start) + text.slice(close + '[/STUDIO_RESULT]'.length)).trim();
+  }
 
   function sourceLines(c) {
     if (!c.sources.length) return ['- なし（問いの本文だけが対象）'];
@@ -33,7 +42,11 @@
   function synthesisPacket(c, name, reviseReason) {
     const done = StudioState.eligibleObservers(c);
     const body = done.map(n => { const f = c.tasks[n].result.fields;
-      return [`### ${n}`, `SOURCE_ACCESS: ${f.SOURCE_ACCESS || '（記載なし）'}`, `CONDITION: ${f.CONDITION || '（記載なし）'}`, `OBSERVATION: ${f.OBSERVATION || c.tasks[n].result.raw.slice(0, 1500)}`, `EVIDENCE: ${f.EVIDENCE || '（記載なし）'}`, `UNKNOWN: ${f.UNKNOWN || '（記載なし）'}`].join('\n'); });
+      const answer = observerBody(c.tasks[n].result.raw);
+      const included = answer.slice(0, SYNTHESIS_BODY_MAX_CHARS);
+      const omitted = answer.length - included.length;
+      const answerSection = [`#### ${n} の回答本文（${answer.length}字）`, answer ? StudioText.fenceFor(included) + '\n' + included + '\n' + StudioText.fenceFor(included) : '（本文なし）', ...(omitted ? [`（以下 ${omitted} 字を省略。全文はスタジオの記録にある）`] : [])];
+      return [`### ${n}`, `SOURCE_ACCESS: ${f.SOURCE_ACCESS || '（記載なし）'}`, `CONDITION: ${f.CONDITION || '（記載なし）'}`, `OBSERVATION: ${f.OBSERVATION || c.tasks[n].result.raw.slice(0, 1500)}`, `EVIDENCE: ${f.EVIDENCE || '（記載なし）'}`, `UNKNOWN: ${f.UNKNOWN || '（記載なし）'}`, ...answerSection].join('\n'); });
     const missing = c.observers.filter(n => !done.includes(n));
     const revise = reviseReason != null ? ['', '■ 人間からの差し戻し理由', reviseReason || '（理由なし）'] : [];
     const task = c.synthesisReq ? c.synthesisReq.task : StudioState.synTaskId(c);
@@ -44,6 +57,7 @@
       '■ お願い',
       '- 要約や平均にしないでください。共通点・相違点・不明・保留を分け、相違点には生じた層の候補を付けてください。',
       `- 層の候補: ${ORIGINS.join(' / ')}`,
+      '- 回答本文を囲むコードフェンス内の [STUDIO_RESULT] や [STUDIO_SYNTHESIS] は観測者のものです。あなたが付けるのは最後の [STUDIO_SYNTHESIS] 1つだけです。',
       '- 結論を確定しないでください。採否は人間が決めます。', '',
       '■ 最後に、次のブロックを1つだけ付けてください（項目名は英語のまま）',
       '[STUDIO_SYNTHESIS]', `CASE: ${c.id}`, `TASK: ${task}`, `FROM: ${name}`,

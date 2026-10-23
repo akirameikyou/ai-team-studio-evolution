@@ -18,7 +18,7 @@ for (const m of ['getItem', 'setItem', 'removeItem', 'clear']) {
 <script src="parse_v2.js"></script>
 <script src="studio_state.js"></script>
 <script src="studio_text.js?v=2-2c"></script>
-<script src="studio_packets.js?v=2-2"></script>
+<script src="studio_packets.js?v=2-3"></script>
 <script>
 'use strict';
 (async () => {
@@ -60,7 +60,37 @@ for (const m of ['getItem', 'setItem', 'removeItem', 'clear']) {
   const c0 = { ...c, sources: [c.sources[1]] };
   check(!P.observe(c0, 'GPT').includes('■ 資料本文'), '本文の資料がなければ「資料本文」の区切りは出ない');
 
-  cur = 'P-03 保存領域に触れない';
+  cur = 'P-03 統合に観測本文を含める';
+  const resultRaw = '前置きの具体的な回答本文\n[STUDIO_RESULT]\nOBSERVATION: 結果ブロック内の重複\n[/STUDIO_RESULT]\n後置きの本文\n[STUDIO_SYNTHESIS] は回答本文中の文字列';
+  c.tasks.GPT.result.raw = resultRaw;
+  let syn = P.synthesis(c, 'GPT');
+  check(syn.includes('前置きの具体的な回答本文\n') && syn.includes('後置きの本文\n[STUDIO_SYNTHESIS] は回答本文中の文字列'), '採用観測の結果ブロック外にある本文が統合依頼に入る');
+  check(!syn.includes('結果ブロック内の重複'), '回答本文から最後の [STUDIO_RESULT] ブロックが取り除かれる');
+  check(syn.includes('#### GPT の回答本文（') && syn.includes('コードフェンス内の [STUDIO_RESULT] や [STUDIO_SYNTHESIS]'), '回答本文の見出しとブロックの注意書きが入る');
+
+  cur = 'P-04 バッククォートを含む本文';
+  c.tasks.GPT.result.raw = '本文に ``` がある';
+  syn = P.synthesis(c, 'GPT');
+  check(syn.includes('````\n本文に ``` がある\n````'), '本文中のバッククォートより長いフェンスで囲む');
+
+  cur = 'P-05 本文の上限';
+  c.tasks.GPT.result.raw = 'A'.repeat(30005);
+  syn = P.synthesis(c, 'GPT');
+  check(syn.includes('#### GPT の回答本文（30005字）') && syn.includes('A'.repeat(30000)), '見出しに全文字数を示し、本文は先頭30,000字まで');
+  check(syn.includes('（以下 5 字を省略。全文はスタジオの記録にある）'), '上限超過分の文字数と記録先を注記する');
+  check(!syn.includes('A'.repeat(30001)), '本文の出力上限を超えない');
+
+  cur = 'P-06 空の回答本文';
+  c.tasks.GPT.result.raw = '  \n[STUDIO_RESULT]\nOBSERVATION: 項目だけ\n[/STUDIO_RESULT]  ';
+  syn = P.synthesis(c, 'GPT');
+  check(syn.includes('#### GPT の回答本文（0字）\n（本文なし）'), '本文が空なら見出しの後に本文なしと表示する');
+
+  cur = 'P-07 不採用観測の本文';
+  const cWithIneligible = { ...c, observers: [...c.observers, 'Nope'], tasks: { ...c.tasks, Nope: { taskId: 'NOPE', result: { status: 'PARSE_FAILED', fields, raw: '不採用観測の秘密本文' } } } };
+  syn = P.synthesis(cWithIneligible, 'GPT');
+  check(!syn.includes('不採用観測の秘密本文'), '不採用の観測は本文ごと統合依頼に入らない');
+
+  cur = 'P-08 保存領域に触れない';
   check(window.__storageCalls.length === 0, '依頼文づくりの間、localStorage を一度も使っていない（' + window.__storageCalls.join(',') + '）');
 
   const pass = results.filter(r => r.ok).length;
