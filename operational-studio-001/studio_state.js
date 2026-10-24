@@ -202,9 +202,10 @@
     const raw = String(a.raw || '');
     const adopts = (a.picked && a.parsed[kind] && ADOPTABLE.includes(a.parsed[kind].status)) || (kind === 'RESULT' && TAGS.every(([k]) => a.parsed[k] === null));
     if (!adopts) return [];
-    const out = [], caseLine = raw.match(/^[ \t]*CASE[ \t]*[:：][ \t]*(\S*)/m), taskLine = /^[ \t]*TASK[ \t]*[:：]/m.test(raw);
-    if (!a.picked && !caseLine && !taskLine) out.push('UNMARKED');
-    if (caseLine && caseLine[1] && caseLine[1] !== c.id) out.push('OTHER_CASE');
+    // Every CASE line is checked, not only the first (Codex audit of 3caae58, finding 1).
+    const out = [], cases = [...raw.matchAll(/^[ \t]*CASE[ \t]*[:：][ \t]*(\S*)/gm)].map(m => m[1]), taskLine = /^[ \t]*TASK[ \t]*[:：]/m.test(raw);
+    if (!a.picked && !cases.length && !taskLine) out.push('UNMARKED');
+    if (cases.some(id => id && id !== c.id)) out.push('OTHER_CASE');
     if (Array.from(raw).length < SHORT_REPLY) out.push('SHORT');
     return out;
   }

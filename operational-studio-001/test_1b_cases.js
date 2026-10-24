@@ -355,6 +355,10 @@ test('AS-02 警告の条件（印・Case・長さ）', () => {
   check(w(pad('TASK: CASE-T-OBS-GPT\n本文', 1500)) === '[]', 'TASK の行があり十分長ければ警告なし');
   check(w(pad('CASE: CASE-T\n本文', 1500)) === '[]', 'この Case の CASE の行があれば印あり');
   check(w(pad('CASE：CASE-OTHER\n本文', 1500)) === '["OTHER_CASE"]', '別の Case の CASE の行（全角コロンも）');
+  check(w(pad('CASE: CASE-T\n本文\n  CASE: CASE-OTHER\n', 1500)) === '["OTHER_CASE"]', '最初の CASE の行がこの Case でも、後の行が別の Case なら確認（Codex 監査 指摘1）');
+  check(w(pad('CASE: CASE-T\n本文\nCASE: CASE-T\n', 1500)) === '[]', 'CASE の行が何度あっても、すべてこの Case なら警告なし');
+  const blk = recv(c, R('Someone', 'X-UNKNOWN', { OBSERVATION: 'あ'.repeat(1200) }) + '\nCASE: CASE-OTHER');
+  check(JSON.stringify(S.assignWarnings(c, blk, 'RESULT')) === '["OTHER_CASE"]', 'ブロックの後ろに別の Case の行があっても確認');
   check(w(pad('TASK: x\n', 999)) === '["SHORT"]' && w(pad('TASK: x\n', 1000)) === '[]', '短いのは 1000 字未満（999 字は警告・1000 字は警告なし）');
   check(S.SHORT_REPLY === 1000, 'しきい値は 1000 字');
   const p = recv(c, R('Someone', 'X-UNKNOWN'));
