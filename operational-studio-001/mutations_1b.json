@@ -1,5 +1,5 @@
 {
- "about": "studio_state.js に意図的な不具合を1つずつ入れ、test_1b_cases.js（受入 A-01〜A-12 の規則部分）が不合格を出すか確かめる。mutation_1b.html で再実行できる。 r2（Codex 段階1b監査後）で B-19〜B-21 を追加。B-17 は到達しない防御の条件で等価な変異（Codex も同意）。 r3（Codex 段階1b再監査 C40 後）で B-22 を追加。",
+ "about": "studio_state.js に意図的な不具合を1つずつ入れ、test_1b_cases.js（受入 A-01〜A-12 の規則部分）が不合格を出すか確かめる。mutation_1b.html で再実行できる。 r2（Codex 段階1b監査後）で B-19〜B-21 を追加。B-17 は到達しない防御の条件で等価な変異（Codex も同意）。 r3（Codex 段階1b再監査 C40 後）で B-22 を追加。 3-2-1（10/24）で B-23〜B-25 を追加（印のない・短い受信の確認）。",
  "mutants": [
   {
    "id": "B-01",
@@ -132,6 +132,24 @@
    "name": "picked なしで採用可能タグがある記録の割り当てを拒否しない（JSON 読込経由の D12 迂回）",
    "find": "if (!a.picked && TAGS.some(([k]) => a.parsed[k] && ADOPTABLE.includes(a.parsed[k].status))) return",
    "replace": "if (false) return"
+  },
+  {
+   "id": "B-23",
+   "name": "印のない短い文を確認なしで採用する",
+   "find": "if (!warnings.every(w => acked.includes(w))) return",
+   "replace": "if (false) return"
+  },
+  {
+   "id": "B-24",
+   "name": "短い文を警告しない",
+   "find": "if (Array.from(raw).length < SHORT_REPLY) out.push('SHORT');",
+   "replace": ""
+  },
+  {
+   "id": "B-25",
+   "name": "CASE・TASK の行があっても印なしとする",
+   "find": "if (!a.picked && !caseLine && !taskLine) out.push('UNMARKED');",
+   "replace": "if (!a.picked) out.push('UNMARKED');"
   }
  ]
 }

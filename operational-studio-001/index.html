@@ -16,12 +16,13 @@
     <div class="side-bottom">
       <button id="settingsBtn" class="btn ghost wide">AIの接続設定</button>
       <button id="restoreBtn" class="btn ghost wide">記録の写しから戻す</button>
-      <div class="side-note">保存先：このブラウザ<br>記録の写し：<span id="backupNote">なし（中継なし）</span><br>外部への送信：<span id="netNote">なし</span></div>
+      <div class="side-note">保存先：このブラウザ<br>この記録：<span id="recordNote">—</span><br>記録の写し：<span id="backupNote">なし（中継なし）</span><br>外部への送信：<span id="netNote">なし</span></div>
     </div>
   </aside>
 
   <main>
     <div id="saveWarn" class="save-warn" hidden></div>
+    <div id="studioWarn" class="save-warn" hidden></div>
     <!-- 入口：問いを書くだけ -->
     <section id="start" class="start" hidden>
       <h1>何を一緒に調べますか？</h1>
@@ -132,9 +133,9 @@
 
 <script src="connectors.js?v=3-2"></script>
 <script src="parse_v2.js"></script>
-<script src="studio_state.js?v=3-2"></script>
-<script src="studio_text.js?v=3-2"></script>
+<script src="studio_state.js?v=3-2-r1"></script>
+<script src="studio_text.js?v=3-2-r1"></script>
 <script src="studio_packets.js?v=2-3"></script>
-<script src="app.js?v=3-2"></script>
+<script src="app.js?v=3-2-r1"></script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 {
- "about": "studio_text.js に意図的な不具合を1つずつ入れ、test_1d_cases.js が不合格を出すか確かめる。mutation_1d.html で再実行できる。",
+ "about": "studio_text.js に意図的な不具合を1つずつ入れ、test_1d_cases.js が不合格を出すか確かめる。mutation_1d.html で再実行できる。 3-2-3・3-2-4（10/24）で T-21〜T-25 を追加（空の写し・別のスタジオ）。",
  "mutants": [
   {
    "id": "T-01",
@@ -120,6 +120,36 @@
    "name": "GitHub の URL を種類 URL にする",
    "find": "add(/github(usercontent)?\\.com/.test(m[0]) ? 'GitHub' : 'URL',",
    "replace": "add('URL',"
+  },
+  {
+   "id": "T-21",
+   "name": "ほぼ空の写しも既定で選ぶ",
+   "find": "selected: list.findIndex(s => !s.nearEmpty)",
+   "replace": "selected: list.length ? 0 : -1"
+  },
+  {
+   "id": "T-22",
+   "name": "このページの写しも別のスタジオの写しとみなす",
+   "find": "!mine.has(s.name) && ",
+   "replace": ""
+  },
+  {
+   "id": "T-23",
+   "name": "まだ写しを書いていないとき、新しい rev を見ない",
+   "find": "const newer = latest.rev > rev;",
+   "replace": "const newer = false;"
+  },
+  {
+   "id": "T-24",
+   "name": "空の記録を 1件と数える",
+   "find": "Object.keys(o.cases).length : 0; } catch (_) { return 0; }",
+   "replace": "Object.keys(o.cases).length : 1; } catch (_) { return 1; }"
+  },
+  {
+   "id": "T-25",
+   "name": "中継の Case の数を見ずに大きさだけで空とみなす",
+   "find": "nearEmpty: typeof s.cases === 'number' ? s.cases === 0 : ",
+   "replace": "nearEmpty: "
   }
  ]
 }

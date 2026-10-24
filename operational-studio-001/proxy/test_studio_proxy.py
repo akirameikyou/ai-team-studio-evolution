@@ -201,6 +201,27 @@ class RelayFileTests(unittest.TestCase):
         self.assertEqual(self.snap({'rev': 1})['status'], 400)
         self.assertFalse((self.ex / '_snapshots').exists())
 
+    def test_a_record_without_cases_is_not_copied(self):
+        empty = json.dumps({'version': 1, 'cases': {}, 'order': [], 'settings': {'observers': []}})
+        r = self.snap({'rev': 2, 'store': empty})
+        self.assertEqual((r['status'], r.get('empty')), (422, True))
+        self.assertFalse((self.ex / '_snapshots').exists())
+        self.assertIn('saved', self.snap({'rev': 3, 'store': self.STORE}))
+
+    def test_the_list_tells_the_case_count_of_small_copies(self):
+        d = self.ex / '_snapshots'
+        d.mkdir(parents=True)
+        (d / 'ats-store-20261024T125301000Z-r2.json').write_text(json.dumps({'version': 1, 'cases': {}, 'order': []}), encoding='utf-8')
+        (d / 'ats-store-20261024T125300000Z-r1.json').write_text('not json', encoding='utf-8')
+        real = self.snap({'rev': 3, 'store': self.STORE})['saved']
+        with mock.patch.object(sp, 'SMALL_SNAPSHOT', 60):
+            big = {s['name']: s for s in self.get_status('/snapshots')[1]['snapshots']}
+        rows = {s['name']: s for s in self.get_status('/snapshots')[1]['snapshots']}
+        self.assertEqual(rows['ats-store-20261024T125301000Z-r2.json']['cases'], 0)
+        self.assertEqual(rows[real]['cases'], 1)
+        self.assertNotIn('cases', rows['ats-store-20261024T125300000Z-r1.json'])
+        self.assertNotIn('cases', big[real])          # larger copies are not read
+
     def test_snapshot_over_the_size_limit_is_refused(self):
         with mock.patch.object(sp, 'MAX_SNAPSHOT', 100):
             r = self.snap({'rev': 1, 'store': self.STORE + ' ' * 200})

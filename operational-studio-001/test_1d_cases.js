@@ -302,6 +302,69 @@ test('RN-06 実行係の記録と返事の照合（3-1-r2 R2）', () => {
   check(T.confirmationLabel('TEMPLATE_VALUE:OBSERVATION') === 'OBSERVATION が依頼文の見本と同じ文言', '既存の項目の名前（見本）');
 });
 
+// 3-2-3 / 3-2-4 (10/24, 009l-A): empty copies, the preselected copy, and two Studios writing to one relay.
+const snap = (stamp, rev, kb, k) => ({ name: `ats-store-20261024T${stamp}Z-r${rev}${k ? '-' + k : ''}.json`, bytes: kb * 1024 });
+test('SN-01 空の記録は写しにしない（Case の数）', () => {
+  check(T.storeCaseCount(JSON.stringify({ version: 1, cases: {}, order: [] })) === 0, 'Case 0件');
+  check(T.storeCaseCount(JSON.stringify({ version: 1, cases: { A: {}, B: {} }, order: ['A', 'B'] })) === 2, 'Case 2件');
+  check(T.storeCaseCount('not json') === 0 && T.storeCaseCount(null) === 0, '読めない記録は 0件（写しにしない）');
+});
+
+test('SN-02 「写しを選ぶ」で空の写しを既定にしない', () => {
+  const n = (s, cases) => ({ ...s, cases });
+  const list = [n(snap('125301000', 2, 1), 0), n(snap('125300000', 1, 1), 0), snap('120000000', 401, 300), snap('110000000', 400, 299)];   // 10/24 12:53 の並び
+  const p = T.copyChoices(list);
+  check(p.selected === 2 && p.list[2].rev === 401, '空でない最新（r401）を選ぶ（先頭の 1 KB・Case 0件の写しは選ばない）');
+  check(p.list[0].nearEmpty && p.list[1].nearEmpty && !p.list[2].nearEmpty && p.list[0].cases === 0 && p.list[2].cases === null, '中継が数えた Case 0件に「空」の印');
+  check(T.copyChoices([n(snap('1', 3, 2), 1)]).selected === 0, '小さくても Case のある写し（Case 1件・2 KB）は空ではない');
+  check(T.copyChoices([n(snap('1', 3, 300), 0)]).selected === -1, 'Case 0件なら大きさによらず空');
+  check(T.copyChoices([snap('1', 2, 1), { name: snap('0', 1, 1).name, bytes: 1535 }]).selected === -1, '数を返さない中継では 1536 bytes 未満を空とみなす（すべて空なら何も選ばない）');
+  check(T.copyChoices([{ name: snap('0', 5, 1).name, bytes: 1536 }]).selected === 0 && T.NEAR_EMPTY_BYTES === 1536, '1536 bytes 以上は空とみなさない');
+  check(T.copyChoices(undefined).selected === -1 && T.copyChoices([]).list.length === 0, '一覧がなくても壊れない');
+});
+
+test('SN-03 写しの名前から rev を読む', () => {
+  check(T.snapshotRev('ats-store-20261024T125301000Z-r425.json') === 425, '通常の名前');
+  check(T.snapshotRev('ats-store-20261024T125301000Z-r3-2.json') === 3, '同じ時刻の2件目（-2）');
+  check(T.snapshotRev('other.json') === null && T.snapshotRev(undefined) === null, '形の違う名前は null');
+});
+
+test('SN-04 別のスタジオが同じ中継に書いている（rev の逆行）', () => {
+  // 10/24 の実例：普段のブラウザ（r402, r403）と組み込みブラウザ（r425 → r427）が交互に写しを書いた。
+  const mine = snap('141000000', 425, 300), list = [snap('141700000', 403, 280), snap('141500000', 402, 280), mine, snap('130000000', 424, 300)];
+  const r = T.recordCheck(list, { rev: 426, ownNames: [mine.name, list[3].name] });
+  check(r.foreign.length === 2 && r.foreign[0].rev === 403 && r.text.includes('別のスタジオが動いています'), 'このページの写しの後に、書いていない写しが2件');
+  check(r.newest.rev === 403, '中継の最新の写しの rev');
+  const ok = T.recordCheck([mine, list[3]], { rev: 426, ownNames: [mine.name, list[3].name] });
+  check(!ok.text && !ok.foreign.length, 'このページの写しだけなら警告なし');
+  const older = T.recordCheck([mine, snap('100000000', 500, 300)], { rev: 426, ownNames: [mine.name] });
+  check(!older.text, 'このページの最初の写しより前の写しは問わない（過去の別の記録）');
+  const tied = T.recordCheck([snap('141000000', 7, 300, 2), mine], { rev: 426, ownNames: [mine.name] });
+  check(tied.foreign.length === 1, '同じ時刻の別の写し（-2）も見落とさない');
+  // The other Studio's copy falls between two copies of this page (seen in the screen check: r9, other r2, r10).
+  const a9 = snap('054824520', 9, 20), o2 = snap('054828115', 2, 20), a10 = snap('054830000', 10, 20);
+  const mid = T.recordCheck([a10, o2, a9], { rev: 10, ownNames: [a9.name, a10.name] });
+  check(mid.foreign.length === 1 && mid.foreign[0].rev === 2, 'このページの2つの写しの間に入った別の写しも見つける');
+});
+
+test('SN-05 このページがまだ写しを書いていないとき', () => {
+  const list = [snap('141700000', 427, 300), snap('125301000', 2, 1)];
+  const r = T.recordCheck(list, { rev: 2, ownNames: [], lastOwn: null });
+  check(r.newer && !r.foreign.length && r.text.includes('より新しい写し') && r.text.includes('r427'), 'この記録（r2）より新しい写し（r427）があれば警告');
+  check(!T.recordCheck(list, { rev: 427, ownNames: [], lastOwn: null }).text, '同じ rev なら警告なし');
+  check(!T.recordCheck([], { rev: 2 }).text && T.recordCheck(undefined, null).newest === null, '写しがなければ警告なし');
+  const behindEmpty = T.recordCheck([{ ...snap('150000000', 2, 1), cases: 0 }, snap('141700000', 427, 300)], { rev: 5, ownNames: [] });
+  check(behindEmpty.newer && behindEmpty.text.includes('r427') && behindEmpty.latest.rev === 427 && behindEmpty.newest.rev === 2, '先頭が空の写しでも、その後ろの空でない写し（r427）と比べる');
+});
+
+test('SN-06 どのブラウザの記録か（利用者の環境の表示）', () => {
+  check(T.browserLabel('Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko) Claude/1.2.3 Chrome/138.0 Electron/37.1.0 Safari/537.36').includes('組み込み'), 'Electron は組み込みブラウザ');
+  check(T.browserLabel('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Claude/3.6556.2 Chrome/152.0.7977.167 Safari/537.36 MSIX').includes('組み込み'), '10/24 の組み込みブラウザ（Electron の表記なし・Claude/ あり）');
+  check(T.browserLabel('Mozilla/5.0 Chrome/141.0.0.0 Safari/537.36') === 'Chrome', 'Chrome');
+  check(T.browserLabel('Mozilla/5.0 Chrome/141.0.0.0 Safari/537.36 Edg/141.0') === 'Edge', 'Edge');
+  check(T.browserLabel('') === 'ブラウザ', '分からなければ「ブラウザ」');
+});
+
 return results;
 }
 if (typeof module !== 'undefined') module.exports = { run1d };

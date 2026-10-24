@@ -24,6 +24,7 @@ MAX_FETCH = 50 * 1024 * 1024
 SETTLE_SECONDS = 2  # a reply file changed this recently (inclusive) may still be being written by an agent
 # 2-C: copies of the Studio record in <exchange>/_snapshots. One file per copy; nothing is overwritten or deleted.
 MAX_SNAPSHOT = 10 * 1024 * 1024
+SMALL_SNAPSHOT = 64 * 1024     # 3-2-3: copies up to this size are read for their Case count when listed (empty ones are ~1 KB)
 SNAPSHOT_NAME = re.compile(r'^ats-store-\d{8}T\d{9}Z-r\d+(-\d+)?\.json$')
 LOCAL_ORIGIN = re.compile(r'^https?://(127\.0\.0\.1|localhost)(:\d+)?$')
 _SNAPSHOT_NAME_LOCK = threading.Lock()
@@ -43,6 +44,21 @@ def snapshot_files():
     out = [p for p in d.glob('ats-store-*.json')
            if SNAPSHOT_NAME.match(p.name) and not p.is_symlink() and p.is_file() and p.resolve().parent == root]
     return sorted(out, key=lambda p: p.name, reverse=True)
+
+
+def snapshot_entry(p):
+    """One line of the /snapshots list. A small copy also tells how many Cases it holds, so the Studio can tell an empty
+    record from a small real one; larger copies are not read (they are never empty)."""
+    size = p.stat().st_size
+    entry = {'name': p.name, 'bytes': size}
+    if size <= SMALL_SNAPSHOT:
+        try:
+            cases = json.loads(p.read_bytes().decode('utf-8')).get('cases')
+            if isinstance(cases, dict):
+                entry['cases'] = len(cases)
+        except (ValueError, AttributeError, OSError):
+            pass
+    return entry
 
 
 def snapshot_problem(text):
@@ -246,7 +262,7 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == '/snapshots':
                 files = snapshot_files()
                 return self.reply(200, {'dir': str(snapshots_dir()), 'snapshots': [
-                    {'name': p.name, 'bytes': p.stat().st_size} for p in files[:50]], 'total': len(files),
+                    snapshot_entry(p) for p in files[:50]], 'total': len(files),
                     'totalBytes': sum(p.stat().st_size for p in files)})
             if u.path == '/snapshot':
                 name = q.get('name', '')
@@ -342,6 +358,9 @@ class Handler(BaseHTTPRequestHandler):
             problem = snapshot_problem(text)
             if problem:
                 return self.reply(400, {'error': problem})
+            if not json.loads(text)['cases']:
+                # 10/24 (009l-A): a browser with empty storage wrote 1 KB copies that became the newest in the list.
+                return self.reply(422, {'error': 'the record has no Case; an empty record is not copied', 'empty': True})
             if snapshots_dir().is_symlink():
                 return self.reply(409, {'error': 'the snapshot folder is a symbolic link; copies are not written there'})
             snapshots_dir().mkdir(parents=True, exist_ok=True)

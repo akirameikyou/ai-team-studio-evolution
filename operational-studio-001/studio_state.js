@@ -192,8 +192,25 @@
     return a;
   }
 
+  // 3-2-1 (10/24, 009l-A): what a person must acknowledge before a receipt is adopted by manual assignment. A 646-character
+  // unrelated text (a stale clipboard) was adopted as an observation in one action. Only an assignment that adopts is checked.
+  //   UNMARKED   = no tag block and no CASE / TASK line: nothing in the text says whose reply it is
+  //   OTHER_CASE = a CASE line naming a different Case
+  //   SHORT      = far shorter than a reply to a Studio request (under SHORT_REPLY characters)
+  const SHORT_REPLY = 1000;
+  function assignWarnings(c, a, kind) {
+    const raw = String(a.raw || '');
+    const adopts = (a.picked && a.parsed[kind] && ADOPTABLE.includes(a.parsed[kind].status)) || (kind === 'RESULT' && TAGS.every(([k]) => a.parsed[k] === null));
+    if (!adopts) return [];
+    const out = [], caseLine = raw.match(/^[ \t]*CASE[ \t]*[:：][ \t]*(\S*)/m), taskLine = /^[ \t]*TASK[ \t]*[:：]/m.test(raw);
+    if (!a.picked && !caseLine && !taskLine) out.push('UNMARKED');
+    if (caseLine && caseLine[1] && caseLine[1] !== c.id) out.push('OTHER_CASE');
+    if (Array.from(raw).length < SHORT_REPLY) out.push('SHORT');
+    return out;
+  }
   // R-6: assign an unassigned receipt to a task of the current generation. No new attempt; never confirms or approves anything.
-  function assign(c, attemptId, target, now, by) {
+  // opts.acknowledged lists the warnings (assignWarnings) the person accepted; without all of them nothing is assigned (S-3).
+  function assign(c, attemptId, target, now, by, opts = {}) {
     const a = attempts(c).find(x => x.attemptId === attemptId);
     if (!a) return { ok: false, why: '受信が見つかりません' };
     if (a.assignment) return { ok: false, why: 'この受信は割り当て済みです（二重割り当ては不可）' };
@@ -208,7 +225,10 @@
     if (kind === 'RESULT' && !c.observers.includes(name)) return { ok: false, why: '観測者がいません' };
     if (kind === 'SYN' && !c.synthesisReq) return { ok: false, why: '統合をまだ依頼していません' };
     if (kind === 'DONE' && !c.next) return { ok: false, why: '実行タスクをまだ送っていません' };
+    const warnings = assignWarnings(c, a, kind), acked = opts.acknowledged || [];
+    if (!warnings.every(w => acked.includes(w))) return { ok: false, needsAck: warnings, why: '確認が必要です：' + warnings.join(', ') };
     a.assignment = { kind, name, task, at: now, mode: 'manual', by: by || 'screen' };
+    if (warnings.length) a.assignment.acknowledged = warnings;
     let outcome = 'assigned';
     const block = a.parsed[kind];
     if (a.picked && block && ADOPTABLE.includes(block.status)) outcome = adopt(c, a, kind, name, now);
@@ -285,6 +305,17 @@
     return { ok: true };
   }
   const deliveryState = req => !req ? null : req.deliveries.some(d => DELIVERED.includes(d.status)) ? 'delivered' : req.deliveries.some(d => d.status === 'failed') ? 'failed' : 'unsent';
+  // 3-2-2 (10/24): what the screen says about a delivery. A manual copy (or a text only shown) proves nothing was sent:
+  // it stays "unconfirmed" until a receipt for that Task is recorded. deliveryState (retry rules) is unchanged.
+  function deliveryLabel(c, req) {
+    const st = deliveryState(req);
+    if (!st) return '';
+    if (st === 'failed') return '送付に失敗（同じ依頼を送り直せます）';
+    if (st === 'unsent') return '未送付';
+    if (req.deliveries.some(d => d.status === 'queued' || d.status === 'answered')) return '送付済み';
+    const what = req.deliveries.some(d => d.status === 'copied') ? 'コピー済み' : '表示済み';
+    return attempts(c).some(a => a.assignment && a.assignment.task === req.task) ? what + '・返事を受信' : what + '（未確認）';
+  }
   function currentTask(c, kind, name) {
     if (kind === 'OBS') return c.tasks && c.tasks[name] ? c.tasks[name].taskId : null;
     if (kind === 'SYN') return c.synthesisReq ? (c.synthesisReq.task || synTaskId(c)) : null;
@@ -302,7 +333,7 @@
     KEYS, attempts, obsRevision, synRevision, confirmedItems, eligibleRecord, pendingConfirmations, eligibleObservers, receivedCount, RUNNER_UNVERIFIED,
     synthesisStale, gateStale, nextStale, doneStale, staleReason, canRequestSynthesis, canGate, canSendNext, canCountDone, synthesisEligible,
     obsTaskId, synTaskId, nextTaskId, obsGen, synGen, nextGen, resultAttemptId,
-    receive, assign, unassigned, setConfirmation, startSynthesisRequest, recordGate, startNext, startObservationResend,
-    requests, recordRequest, recordDelivery, deliveryState, currentRequest, canRetry
+    receive, assign, assignWarnings, SHORT_REPLY, unassigned, setConfirmation, startSynthesisRequest, recordGate, startNext, startObservationResend,
+    requests, recordRequest, recordDelivery, deliveryState, deliveryLabel, currentRequest, canRetry
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

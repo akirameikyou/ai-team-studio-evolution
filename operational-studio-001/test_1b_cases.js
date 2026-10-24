@@ -19,6 +19,8 @@ const SYN = (task, extra = {}) => '[STUDIO_SYNTHESIS]\n' + lines({ CASE: 'CASE-T
 const DONE = (task, extra = {}) => '[STUDIO_DONE]\n' + lines({ CASE: 'CASE-T', TASK: task, FROM: 'Claude Code', CHANGED: 'x', VERIFIED: 'y', UNKNOWN: 'なし', NEXT: 'z', ...extra }) + '\n[/STUDIO_DONE]';
 const BROKEN = '[STUDIO_RESULT]\nCASE: CASE-T\nOBSERVATION: 途中\n[/STUDIO_RESULT]';           // 2 keys -> PARSE_FAILED
 const recv = (c, text, expectedTask, via = '貼り付け') => S.receive(c, text, { via, now: t(), rawSha256: null, expectedTask });
+// 3-2-1: every warning acknowledged, so a refusal can only come from the rule under test (mutants B-06, B-19).
+const ACK_ALL = { acknowledged: ['UNMARKED', 'OTHER_CASE', 'SHORT'] };
 const attemptOf = (c, name) => c.tasks[name].result && c.tasks[name].result.attemptId;
 const confirmAll = (c, kind, name) => { const rec = kind === 'RESULT' ? c.tasks[name].result : kind === 'SYN' ? c.synthesis : c.done; for (const it of S.pendingConfirmations(c, kind, rec, name)) S.setConfirmation(c, S.resultAttemptId(c, kind, rec, name), it, 'confirm', t()); };
 // Full happy path up to an approved NEXT, used by several tests.
@@ -101,7 +103,7 @@ test('A-05 形式外（NO_BLOCK）', () => {
   const c = newCase();
   const a = recv(c, 'ただの文章');
   check(a.outcome === 'noblock' && !a.assignment, '宛先不明として記録');
-  S.assign(c, a.attemptId, { kind: 'RESULT', name: 'GPT' }, t());
+  S.assign(c, a.attemptId, { kind: 'RESULT', name: 'GPT' }, t(), 'screen', { acknowledged: ['UNMARKED', 'SHORT'] });   // 3-2-1: a person confirms first
   const r = c.tasks.GPT.result;
   check(r.status === 'NO_BLOCK' && r.reason === null && Object.keys(r.fields).length === 0 && r.missing.length === 8 && r.conflicts.length === 0 && r.selected === null && r.candidates.length === 0 && r.ruleVersion === 'v2', '保存形が契約どおり');
   recv(c, R('Claude Code', 'CASE-T-OBS-ClaudeCode'));
@@ -195,9 +197,9 @@ test('A-10 宛先の後からの割り当て', () => {
   const a = recv(c, R('Someone', 'X-UNKNOWN'));
   const n = S.attempts(c).length, at = a.at, via = a.via;
   check(a.outcome === 'unassigned' && S.unassigned(c).some(x => x.attemptId === a.attemptId), '未割り当てに並ぶ');
-  const r = S.assign(c, a.attemptId, { kind: 'RESULT', name: 'GPT' }, t());
+  const r = S.assign(c, a.attemptId, { kind: 'RESULT', name: 'GPT' }, t(), 'screen', { acknowledged: ['SHORT'] });   // 3-2-1
   check(r.ok && S.attempts(c).length === n && a.at === at && a.via === via && a.assignment.mode === 'manual', '新しい試行は作られず、時刻・経路はそのまま');
-  check(!S.assign(c, a.attemptId, { kind: 'RESULT', name: 'Claude Code' }, t()).ok, '二重割り当ては拒否');
+  check(!S.assign(c, a.attemptId, { kind: 'RESULT', name: 'Claude Code' }, t(), 'screen', ACK_ALL).ok, '二重割り当ては拒否');
   check((c.confirmations || []).length === 0 && c.gate.decision === 'APPROVE' && c.gateHistory.length === 1, '割り当てだけで確認・GATE は起きない');
   check(S.synthesisStale(c), '採用が切り替わったので下流は古くなる');
   const b = recv(c, SYN('').replace('TASK: \n', '').replace('[STUDIO_SYNTHESIS]', '[STUDIO_SYNTHESIS]'));
@@ -211,9 +213,9 @@ test('A-06/A-10 補 手動割り当てでも D12 を迂回できない（Codex �
   // Priority picks the SYNTHESIS block, whose TASK matches nothing -> unassigned; the lower RESULT block is in notAdopted.
   const a = recv(c, SYN('X-NOT-A-TASK') + '\n' + R('GPT', 'CASE-T-OBS-GPT'));
   check(a.picked === 'SYN' && a.outcome === 'unassigned' && a.notAdopted.some(x => x.tag === 'RESULT'), '優先された統合が宛先不明、観測は notAdopted');
-  const r1 = S.assign(c, a.attemptId, { kind: 'RESULT', name: 'GPT' }, t());
+  const r1 = S.assign(c, a.attemptId, { kind: 'RESULT', name: 'GPT' }, t(), 'screen', ACK_ALL);
   check(!r1.ok && !c.tasks.GPT.result && !a.assignment, '観測への手動割り当ては拒否され、観測は採用されない');
-  const r2 = S.assign(c, a.attemptId, { kind: 'SYN' }, t());
+  const r2 = S.assign(c, a.attemptId, { kind: 'SYN' }, t(), 'screen', { acknowledged: ['SHORT'] });   // 3-2-1
   check(r2.ok && r2.outcome === 'adopted' && c.synthesis && c.synthesis.attemptId === a.attemptId, '優先されたタグ（統合）への割り当ては宛先の補完として採用');
   const b = recv(c, BROKEN); check(b.outcome === 'failed' && !b.picked, '失敗の受信は picked なし');
   check(S.assign(c, b.attemptId, { kind: 'RESULT', name: 'GPT' }, t()).ok && !c.tasks.GPT.result, '失敗の受信は記録として割り当てでき、採用はされない');
@@ -225,11 +227,11 @@ test('A-06/A-10 補2 整合しない JSON 記録からも D12 を迂回できな
   const back = JSON.parse(JSON.stringify(c));                       // export -> import
   const a = S.attempts(back)[S.attempts(back).length - 1]; a.picked = null;   // edited / inconsistent file
   for (const kind of ['RESULT', 'SYN']) {
-    const r = S.assign(back, a.attemptId, kind === 'RESULT' ? { kind, name: 'GPT' } : { kind }, t());
+    const r = S.assign(back, a.attemptId, kind === 'RESULT' ? { kind, name: 'GPT' } : { kind }, t(), 'screen', ACK_ALL);
     check(!r.ok && !a.assignment, kind + ' への割り当ては拒否（採用できるタグがあるのに picked なし）');
   }
   check(!back.tasks.GPT.result && !back.synthesis, '何も採用されない');
-  const b = recv(back, 'ただの文章'); check(!b.picked && S.assign(back, b.attemptId, { kind: 'RESULT', name: 'GPT' }, t()).ok, '形式外（全タグ null）の割り当ては従来どおりできる');
+  const b = recv(back, 'ただの文章'); check(!b.picked && S.assign(back, b.attemptId, { kind: 'RESULT', name: 'GPT' }, t(), 'screen', { acknowledged: ['UNMARKED', 'SHORT'] }).ok, '形式外（全タグ null）の割り当ては従来どおりできる（3-2-1 の確認のうえ）');
 });
 
 test('A-07 補 古い NEXT への完了報告は採用しない（Codex 段階1b監査 指摘2）', () => {
@@ -329,6 +331,44 @@ test('RN-B5 実行係を通らない返事（手動・貼り付け）は今ま�
   const a = recv(c, R('GPT', task), task);
   check(!('runner' in a) && !('runnerCheck' in a), '項目を足さない');
   check(S.eligibleRecord(c, 'RESULT', c.tasks.GPT.result, 'GPT'), '利用可能');
+});
+
+// 3-2-1 (10/24, 009l-A): a 646-character unrelated text (a stale clipboard) was adopted as an observation in one action.
+const pad = (s, n) => s + 'あ'.repeat(Math.max(0, n - Array.from(s).length));
+test('AS-01 宛先の印がない短い文は、確認なしでは観測にしない', () => {
+  const c = newCase(), stray = pad('Here is what I changed in the relay and why. ', 646);
+  const a = recv(c, stray), before = JSON.stringify(c);
+  check(a.outcome === 'noblock' && !a.assignment, '前提: 宛先不明として未割り当てに並ぶ');
+  check(JSON.stringify(S.assignWarnings(c, a, 'RESULT')) === '["UNMARKED","SHORT"]' && JSON.stringify(c) === before, '警告は印なし・短い（読むだけで記録は変わらない）');
+  const r = S.assign(c, a.attemptId, { kind: 'RESULT', name: 'GPT' }, t());
+  check(!r.ok && JSON.stringify(r.needsAck) === '["UNMARKED","SHORT"]', '確認なしの割り当ては拒否し、確認すべき項目を返す');
+  check(!a.assignment && !c.tasks.GPT.result && S.obsRevision(c) === 0 && S.unassigned(c).includes(a), '何も採用されず、未割り当てに残る');
+  check(!S.assign(c, a.attemptId, { kind: 'RESULT', name: 'GPT' }, t(), 'screen', { acknowledged: ['UNMARKED'] }).ok && !a.assignment, '確認が一部だけなら拒否');
+  const r2 = S.assign(c, a.attemptId, { kind: 'RESULT', name: 'GPT' }, t(), 'screen', { acknowledged: ['UNMARKED', 'SHORT'] });
+  check(r2.ok && r2.outcome === 'adopted' && c.tasks.GPT.result.status === 'NO_BLOCK', 'すべて確認すれば、従来どおり形式外として採用');
+  check(JSON.stringify(a.assignment.acknowledged) === '["UNMARKED","SHORT"]' && a.assignment.mode === 'manual', '確認した項目を割り当ての記録に残す');
+});
+
+test('AS-02 警告の条件（印・Case・長さ）', () => {
+  const c = newCase(), w = text => JSON.stringify(S.assignWarnings(c, recv(c, text), 'RESULT'));
+  check(w(pad('長い文章だが印がない。', 1500)) === '["UNMARKED"]', '長くても印がなければ確認');
+  check(w(pad('TASK: CASE-T-OBS-GPT\n本文', 1500)) === '[]', 'TASK の行があり十分長ければ警告なし');
+  check(w(pad('CASE: CASE-T\n本文', 1500)) === '[]', 'この Case の CASE の行があれば印あり');
+  check(w(pad('CASE：CASE-OTHER\n本文', 1500)) === '["OTHER_CASE"]', '別の Case の CASE の行（全角コロンも）');
+  check(w(pad('TASK: x\n', 999)) === '["SHORT"]' && w(pad('TASK: x\n', 1000)) === '[]', '短いのは 1000 字未満（999 字は警告・1000 字は警告なし）');
+  check(S.SHORT_REPLY === 1000, 'しきい値は 1000 字');
+  const p = recv(c, R('Someone', 'X-UNKNOWN'));
+  check(p.outcome === 'unassigned' && JSON.stringify(S.assignWarnings(c, p, 'RESULT')) === '["SHORT"]', 'ブロックのある受信は印ありだが、短ければ確認');
+  const q = recv(c, R('Someone', 'X-UNKNOWN', { OBSERVATION: 'あ'.repeat(1200) }));
+  check(JSON.stringify(S.assignWarnings(c, q, 'RESULT')) === '[]' && S.assign(c, q.attemptId, { kind: 'RESULT', name: 'GPT' }, t()).ok, '十分長いブロックは従来どおり確認なしで割り当て');
+});
+
+test('AS-03 採用しない割り当ては確認を求めない', () => {
+  const c = approvedCase();
+  const b = recv(c, BROKEN);
+  check(JSON.stringify(S.assignWarnings(c, b, 'RESULT')) === '[]' && S.assign(c, b.attemptId, { kind: 'RESULT', name: 'GPT' }, t()).ok, '解析に失敗した受信は記録として割り当て（採用しないので確認なし）');
+  const x = recv(c, 'x');
+  check(S.assign(c, x.attemptId, { kind: 'SYN' }, t()).ok && c.synthesis.raw !== 'x', '統合への形式外は採用しないので確認なし');
 });
 
   return results;

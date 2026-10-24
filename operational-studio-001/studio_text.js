@@ -138,6 +138,50 @@
     return { store: o };
   }
 
+  // 3-2-3 (10/24, 009l-A): a browser with empty storage wrote 1 KB copies that became the newest in the list, and the
+  // list preselected the newest. A record with no Case is not copied, and an empty copy is never preselected. The relay
+  // reports the Case count of small copies (`cases`); only for a relay that does not, a copy under NEAR_EMPTY_BYTES is
+  // taken as empty (an empty record is about 1 KB, a record with one new Case about 2 KB).
+  const NEAR_EMPTY_BYTES = 1536;
+  function storeCaseCount(text) {
+    try { const o = JSON.parse(String(text)); return o && o.cases && typeof o.cases === 'object' ? Object.keys(o.cases).length : 0; } catch (_) { return 0; }
+  }
+  // The copies as listed by the relay (newest first), with the one to preselect: the newest that is not near-empty (-1: none).
+  function copyChoices(snapshots) {
+    const list = (snapshots || []).map(s => ({ name: s.name, bytes: s.bytes || 0, rev: snapshotRev(s.name), cases: typeof s.cases === 'number' ? s.cases : null,
+      nearEmpty: typeof s.cases === 'number' ? s.cases === 0 : (s.bytes || 0) < NEAR_EMPTY_BYTES }));
+    return { list, selected: list.findIndex(s => !s.nearEmpty) };
+  }
+  // 3-2-4: the rev in a copy's name (ats-store-<time>-r<rev>[-<n>].json), or null.
+  function snapshotRev(name) { const m = String(name || '').match(/-r(\d+)(?:-\d+)?\.json$/); return m ? +m[1] : null; }
+  const snapshotStamp = name => String(name || '').slice(10, 29);    // the time part; names of the same pattern sort by it
+  // 3-2-4 (10/24): two Studios (the app's built-in browser and the user's own browser) wrote diverging records to the
+  // same relay, and nothing on screen showed it: their copies alternated (rev 425 -> 402 -> 403 -> 427).
+  // own = { rev, ownNames: names this page wrote }. Returns { newest, latest: the newest copy that is not empty, foreign:
+  // copies since this page's first copy that it did not write (also those between two of its own copies), newer: a newer
+  // rev before this page wrote anything, text }.
+  // text is '' when nothing is wrong.
+  function recordCheck(snapshots, own) {
+    const list = (snapshots || []).filter(s => snapshotRev(s.name) != null).map(s => ({ name: s.name, rev: snapshotRev(s.name), bytes: s.bytes || 0, cases: typeof s.cases === 'number' ? s.cases : null }));
+    const newest = list[0] || null, mine = new Set((own && own.ownNames) || []), rev = (own && own.rev) || 0;
+    if (!newest) return { newest: null, latest: null, foreign: [], newer: false, text: '' };
+    const latest = list.find(s => s.cases !== 0) || newest;            // an empty copy (Case 0件) is not "the record"
+    if (mine.size) {
+      const since = [...mine].map(snapshotStamp).sort()[0];
+      const foreign = list.filter(s => !mine.has(s.name) && snapshotStamp(s.name) >= since);
+      return { newest, latest, foreign, newer: false, text: foreign.length
+        ? `別のスタジオが動いています：このページが写しを保存し始めてから、このページが書いていない写しが ${foreign.length} 件あります（最新 ${foreign[0].name}・r${foreign[0].rev}）。使うスタジオを1つに決めてください。` : '' };
+    }
+    const newer = latest.rev > rev;
+    return { newest, latest, foreign: [], newer, text: newer
+      ? `中継に、この記録（r${rev}）より新しい写し（${latest.name}・r${latest.rev}）があります。別のスタジオが動いているか、このページの記録が古い可能性があります。使う前に「記録の写しから戻す」で確かめてください。` : '' };
+  }
+  // Which browser this page runs in, for the record note. A guess from the user agent, shown as such.
+  function browserLabel(ua) {
+    const s = String(ua || '');
+    return /Electron\/|Claude\//.test(s) ? '組み込みブラウザ（Claude アプリ）' : /Edg\//.test(s) ? 'Edge' : /Firefox\//.test(s) ? 'Firefox' : /Chrome\//.test(s) ? 'Chrome' : /Safari\//.test(s) ? 'Safari' : 'ブラウザ';
+  }
+
   // 2-E: the default settings served by the relay (proxy/studio.config.json), checked before use. Returns the settings
   // object to store, or { error }. Only a relay on this machine is accepted; connectors and routes must be known values.
   const CONNECTORS = ['manual', 'proxy'], ROUTES = ['agent', 'api:openai', 'api:anthropic', 'api:gemini', 'mock', 'manual'];
@@ -212,5 +256,5 @@
       : it.startsWith('DUPLICATE_KEY:') ? it.slice(14) + ' が2回あり値が違う（最初の値を使用）' : it;
   }
 
-  global.StudioText = { extractSources, splitDifferences, LAYERS, relaySafeName, relayPaths, agentInstruction, TEXT_KIND, TEXT_MAX, textSource, sourceBodies, isDuplicateText, fenceFor, caseIdFor, parseStoreSnapshot, studioSettingsFrom, runnerLabel, runnerGuideNote, runnerConditionText, runnerCheckText, confirmationLabel };
+  global.StudioText = { extractSources, splitDifferences, LAYERS, relaySafeName, relayPaths, agentInstruction, TEXT_KIND, TEXT_MAX, textSource, sourceBodies, isDuplicateText, fenceFor, caseIdFor, parseStoreSnapshot, NEAR_EMPTY_BYTES, storeCaseCount, copyChoices, snapshotRev, recordCheck, browserLabel, studioSettingsFrom, runnerLabel, runnerGuideNote, runnerConditionText, runnerCheckText, confirmationLabel };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

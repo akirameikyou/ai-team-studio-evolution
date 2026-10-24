@@ -126,6 +126,30 @@ test('Q-08 送付の記録に経路と中継が書いたファイルの場所を
   check(JSON.stringify(S.currentRequest(back, 'OBS', 'GPT').deliveries) === JSON.stringify(r.deliveries), 'JSON の書き出しと読み込みで変わらない');
 });
 
+// 3-2-2 (10/24, 009l-A): "依頼文をコピー" was recorded as 送付済み although nothing had been sent.
+test('CL-01 手動のコピーは「コピー済み（未確認）」、送付済みにしない', () => {
+  const c = newCase(), r = rec(c, 'OBS', 'GPT', 'CASE-T-OBS-GPT', 1, 'P');
+  check(S.deliveryLabel(c, null) === '' && S.deliveryLabel(c, r) === '未送付', '記録なしは空、送付前は未送付');
+  S.recordDelivery(c, r.requestId, { at: t(), status: 'copied', connector: 'manual' });
+  check(S.deliveryLabel(c, r) === 'コピー済み（未確認）', 'コピーしただけでは未確認');
+  check(S.deliveryState(r) === 'delivered' && !S.canRetry(c, 'OBS', 'GPT'), '送り直しの判定（deliveryState）は従来どおり');
+  recv(c, R('Claude Code', 'CASE-T-OBS-ClaudeCode'));
+  check(S.deliveryLabel(c, r) === 'コピー済み（未確認）', 'ほかの Task の返事では確かめたことにならない');
+  recv(c, R('GPT', 'CASE-T-OBS-GPT'));
+  check(S.deliveryLabel(c, r) === 'コピー済み・返事を受信', 'その Task の返事を受信すると、送ったことが確かめられる');
+  const r2 = rec(c, 'OBS', 'Claude Code', 'CASE-T-OBS-ClaudeCode-2', 2, 'P2');
+  S.recordDelivery(c, r2.requestId, { at: t(), status: 'shown', connector: 'manual' });
+  check(S.deliveryLabel(c, r2) === '表示済み（未確認）', '画面に表示しただけ（shown）も未確認');
+  const r3 = rec(c, 'SYN', 'GPT', 'CASE-T-SYN', 1, 'P3');
+  ok(c, r3.requestId, 'queued');
+  check(S.deliveryLabel(c, r3) === '送付済み', '中継が受け取った（queued）は送付済み');
+  const r4 = rec(c, 'NEXT', 'Claude Code', 'CASE-T-NEXT', 1, 'P4');
+  fail(c, r4.requestId, 'x');
+  check(S.deliveryLabel(c, r4).startsWith('送付に失敗'), '失敗は従来どおり');
+  ok(c, r4.requestId, 'copied', true);
+  check(S.deliveryLabel(c, r4) === 'コピー済み（未確認）', '失敗の後にコピーしても未確認');
+});
+
 return results;
 }
 if (typeof module !== 'undefined') module.exports = { run1c };
