@@ -16,7 +16,7 @@ Binds to 127.0.0.1 only. CORS is limited to localhost and the project's GitHub P
 Run:  python studio_proxy.py            (port 8787)
       python studio_proxy.py --port 9000
 """
-import argparse, hashlib, json, os, re, socket, sys, tempfile, threading, time, urllib.error, urllib.parse, urllib.request
+import argparse, hashlib, json, os, re, sys, tempfile, threading, time, urllib.error, urllib.parse, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -326,25 +326,7 @@ class Handler(BaseHTTPRequestHandler):
             self.record_reply(code, obj, cors=cors, close=True)
         except OSError as e:
             sys.stderr.write(f'[relay] the answer to {path} could not be sent ({code}): {e}\n')
-        self.linger()
-
-    def linger(self):
-        """Close without a reset: bytes the client sent beyond the body are received and dropped, never parsed,
-        for at most LINGER_SECONDS and MAX_BODY bytes (a reset could discard the answer before the client reads it)."""
-        try:
-            self.connection.shutdown(socket.SHUT_WR)
-            end, total = time.monotonic() + record_store.LINGER_SECONDS, 0
-            while total <= record_store.MAX_BODY:
-                left = end - time.monotonic()
-                if left <= 0:
-                    break
-                self.connection.settimeout(left)
-                chunk = self.connection.recv(65536)
-                if not chunk:
-                    break
-                total += len(chunk)
-        except OSError:
-            pass
+        record_store.linger(self.connection)    # close without a reset; what follows the body is never parsed
 
     def do_GET(self):
         u = urllib.parse.urlparse(self.path); q = dict(urllib.parse.parse_qsl(u.query))

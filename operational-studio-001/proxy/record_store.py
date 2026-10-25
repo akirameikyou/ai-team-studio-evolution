@@ -1,6 +1,6 @@
 """AI Team Studio — the record kept by the relay (課題 3-A). Standard library only.
 
-Contract: ../RECORD_API_3A.md 0.6.1. Tests: test_record_api.py (§7).
+Contract: ../RECORD_API_3A.md 0.6.2. Tests: test_record_api.py (§7).
 
 Why it exists:
   * The Studio record lived only in one browser's storage, so two Studios or a cleared storage could lose it.
@@ -14,7 +14,7 @@ Why it exists:
 
 The HTTP side (gate, routing) is in studio_proxy.py; this module holds the files, the checks and the body framing.
 """
-import datetime, hashlib, json, os, re, stat, sys, tempfile, threading, time
+import datetime, hashlib, json, os, re, socket, stat, sys, tempfile, threading, time
 from pathlib import Path
 
 LOCK_WAIT = 10                    # seconds to wait for the record lock before answering 503 busy (§6.1)
@@ -22,6 +22,8 @@ BODY_DEADLINE = 10                # absolute deadline for reading a POST body, f
 MAX_BODY = 2 * 1024 * 1024        # one write (利用者の決定 §8-2)
 REPLACE_ATTEMPTS, REPLACE_WAIT = 5, 0.2   # Windows: replacing a file another process holds open can fail for a moment
 LINGER_SECONDS = 1.0              # after a POST answer, unread bytes are discarded (never parsed) for this long
+LINGER_MAX_BYTES = MAX_BODY       # ... and at most this many bytes in all (§4.1, 0.6.2)
+LIST_FORMAT = 'ats-record-list-1'  # the shape of the GET /record answer (§3, 0.6.2)
 
 CASE_ID = re.compile(r'CASE-\d{8}-\d{3}(-[a-z0-9]{6})?')
 REQUEST_ID = re.compile(r'[A-Za-z0-9-]{8,64}')
@@ -230,6 +232,29 @@ def read_body(headers, rfile, sock):
         return parse_strict(data.decode('utf-8'))
     except ValueError as e:
         raise Answer(400, {'error': f'not JSON as accepted here: {e}'})
+
+
+def linger(sock):
+    """§4.1 (0.6.2): after the answer has been sent, close our sending side and receive, without looking at it,
+    what the client already sent, for at most LINGER_SECONDS and LINGER_MAX_BYTES in all (each receive is limited
+    to what is left, so the limit is never passed). Closing with unread bytes can make Windows reset the
+    connection and drop the answer before the client reads it. Returns the number of bytes dropped."""
+    total = 0
+    try:
+        sock.shutdown(socket.SHUT_WR)
+        end = time.monotonic() + LINGER_SECONDS
+        while total < LINGER_MAX_BYTES:
+            left = end - time.monotonic()
+            if left <= 0:
+                break
+            sock.settimeout(left)
+            chunk = sock.recv(min(65536, LINGER_MAX_BYTES - total))
+            if not chunk:
+                break
+            total += len(chunk)
+    except OSError:
+        pass
+    return total
 
 
 def _bad(why):
@@ -496,7 +521,7 @@ class RecordStore:
                 self._mark(key, 'corrupt', e.rel)
                 continue
             if cur is not None and (rev > cur['rev'] or (rev == cur['rev'] and data != cur_data)):
-                self._mark(key, 'corrupt', rel)      # only an identical copy of the current file may share its rev
+                self._mark(key, 'corrupt', rel)      # §3.3.1 rev rule: only an identical copy may share the current rev
             self._index_add(idx, key, doc, rel)
         if cur is not None:
             self._index_add(idx, key, cur, g['current'])
@@ -700,7 +725,7 @@ class RecordStore:
         except Answer:
             b = self.bad[SETTINGS]
             settings = {'rev': None, 'problem': b['problem'], 'files': list(b['files'])}
-        return 200, {'cases': [r[1] for r in rows], 'settings': settings,
+        return 200, {'format': LIST_FORMAT, 'cases': [r[1] for r in rows], 'settings': settings,
                      'history': {'files': self.hist_files, 'bytes': self.hist_bytes}, 'unknownFiles': list(self.unknown)}
 
 

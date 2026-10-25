@@ -1,6 +1,6 @@
 """Tests for the record API of the relay (課題 3-A). Standard library only.
 
-Contract: ../RECORD_API_3A.md 0.6.1, §7 (R-01 .. R-26, R-13b, R-16b, R-16c, R-16d).
+Contract: ../RECORD_API_3A.md 0.6.2, §7 (R-01 .. R-29, R-13b, R-16b, R-16c, R-16d).
 Written before the implementation (test first): until record_store.py exists, every test fails in setUp.
 
 Run from operational-studio-001/proxy:   python -m unittest test_record_api -v
@@ -20,6 +20,8 @@ The interface these tests assume (the contract leaves these names to the impleme
     LOCK_WAIT = 10              seconds to wait for the record lock (§6.1)
     BODY_DEADLINE = 10          absolute deadline for reading a POST body, measured with time.monotonic (§4.1)
     MAX_BODY = 2 * 1024 * 1024  (§4)
+    linger(sock)                after a POST answer: shutdown(SHUT_WR), then drop what the client sent for at most
+                                LINGER_SECONDS = 1.0 and LINGER_MAX_BYTES = 2 MiB; returns the bytes dropped (§4.1, 0.6.2)
     _fault(stage)               no-op test hook, looked up on the module at each call. Stages of one write (§3.1):
                                 'before_history' (after the checks, before step 6), 'after_history' (between 6
                                 and 7), 'before_replace' (step 7, temporary file complete, before os.replace),
@@ -430,6 +432,12 @@ class WriteReadTests(RecordBase):
         self.assertEqual(lst['settings']['rev'], 0)
         self.assertEqual(lst['history'], {'files': 0, 'bytes': 0})
         self.assertTrue(self.no_temp_files())
+
+    def test_r27_the_listing_names_its_format(self):
+        self.assertEqual(self.listing()['format'], 'ats-record-list-1')
+        self.write_revs(cid(1), 1)
+        self.restart()
+        self.assertEqual(self.listing()['format'], 'ats-record-list-1')
 
     def test_r01_unknown_case_is_404(self):
         self.assertEqual(self.get_case(cid(9)).status, 404)
@@ -1033,6 +1041,54 @@ class BodyTests(RecordBase):
         self.assertEqual(self.get_case(A).json['rev'], 1)
 
 
+class LingerTests(unittest.TestCase):
+    """R-28 (§4.1, 0.6.2): what is dropped after an answer stays within its limits."""
+
+    class Client:
+        """A client that keeps sending: every recv gets `per_recv` bytes (or what was asked, if less)."""
+        def __init__(self, per_recv=None, delay=0.0):
+            self.asked, self.per_recv, self.delay, self.shut = [], per_recv, delay, None
+
+        def shutdown(self, how):
+            self.shut = how
+
+        def settimeout(self, t):
+            pass
+
+        def recv(self, n):
+            self.asked.append(n)
+            if self.delay:
+                time.sleep(self.delay)
+            return b'x' * (n if self.per_recv is None else min(n, self.per_recv))
+
+    def setUp(self):
+        if rs is None:
+            self.fail('record_store.py does not exist yet (3-A is not implemented)')
+
+    def test_r28_never_more_than_the_byte_limit(self):
+        for limit, per_recv in ((rs.MAX_BODY, None), (100_000, None), (100_000, 7_000), (65_537, None)):
+            with self.subTest(limit=limit, per_recv=per_recv), mock.patch.object(rs, 'LINGER_MAX_BYTES', limit), \
+                    mock.patch.object(rs, 'LINGER_SECONDS', 30):
+                c = self.Client(per_recv)
+                self.assertEqual(rs.linger(c), limit)
+                self.assertEqual(c.shut, socket.SHUT_WR, 'the sending side is closed first')
+                got = 0
+                for n in c.asked:
+                    self.assertLessEqual(n, limit - got, 'each receive is limited to what is left')
+                    self.assertLessEqual(n, 65536)
+                    got += n if per_recv is None else min(n, per_recv)
+
+    def test_r28_never_longer_than_the_time_limit(self):
+        with mock.patch.object(rs, 'LINGER_SECONDS', 0.5):
+            t0 = time.monotonic()
+            dropped = rs.linger(self.Client(per_recv=1, delay=0.05))
+            elapsed = time.monotonic() - t0
+        self.assertLess(elapsed, 1.0)
+        self.assertGreater(dropped, 0)
+        self.assertEqual(rs.LINGER_SECONDS, 1.0)
+        self.assertEqual(rs.LINGER_MAX_BYTES, 2 * MIB)
+
+
 # =====================================================================================================
 class LockTests(RecordBase):
     def stage_hook(self, stage, action):
@@ -1121,6 +1177,30 @@ class StartupTests(RecordBase):
         log = err.getvalue()
         self.assertRegex(log, r'files=5\b', log)        # cases A, B; history A/1, A/2, B/1
         self.assertRegex(log, r'seconds=\d', log)
+
+    def test_r29_history_revs_must_not_pass_the_current_one(self):
+        ids = {k: cid(n) for n, k in enumerate(['newer', 'same rev other content', 'same rev other bytes',
+                                                 'same rev same bytes', 'healthy'], 1)}
+        for id_ in ids.values():
+            self.write_revs(id_, 2)
+        self.close()
+        A = ids['newer']
+        self.hist_file(A, 3).write_bytes(dump(version_doc('case', A, 3, make_case(A, question='正本より新しい'), new_rid())))
+        B = ids['same rev other content']
+        self.hist_file(B, 2).write_bytes(dump(version_doc('case', B, 2, make_case(B, question='同じ rev の別の中身'), new_rid())))
+        C = ids['same rev other bytes']
+        self.hist_file(C, 2).write_bytes(json.dumps(load(self.case_file(C)), ensure_ascii=True, indent=1).encode())
+        D = ids['same rev same bytes']
+        self.hist_file(D, 2).write_bytes(self.case_file(D).read_bytes())
+        self.open()
+        for key in ('newer', 'same rev other content', 'same rev other bytes'):
+            with self.subTest(key):
+                self.assert_case_corrupt(ids[key], 2)
+        for key in ('same rev same bytes', 'healthy'):
+            with self.subTest(key):
+                self.assertNotIn('problem', self.entry(ids[key]))
+                self.assert_case_ok(ids[key], 2)
+                self.assertEqual(self.post_case(make_case(ids[key], question='続き'), 2).status, 200)
 
     def test_r22_a_write_is_added_to_the_index(self):
         A = cid(1)
