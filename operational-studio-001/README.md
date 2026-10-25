@@ -135,3 +135,14 @@ localhost で次のページを開くと、外部に通信せずに試験が走�
 | `harness_v2r3.html`・`mutation_runner_r3.html` | 返事の解析ルール v2 の試験（段階1a） |
 
 仕様の正本は [SPEC.txt](SPEC.txt)（Studio 仕様書）です。制約と未実装の項目は [LIMITATIONS.md](LIMITATIONS.md)、試験記録は [TEST_REPORT.md](TEST_REPORT.md) にあります。
+
+## 記録の口（課題3-A。画面とはまだつないでいない）
+
+中継は起動時に `proxy/exchange/_record/` を開き、Case と設定をファイルで持ちます（Git の対象外）。約束ごとは `RECORD_API_3A.md`、制約は `LIMITATIONS.md` の「記録の口」。
+
+- 口：`GET /record`（一覧）・`GET /record/case?id=`・`POST /record/case`・`GET /record/settings`・`POST /record/settings`。この PC のページと道具だけが使えます（Host と Origin を確かめます）。
+- 書き込みは、読んだ版（`baseRev`）が今の版と違えば断ります（409）。自動で混ぜません。前の版は `history/` に全部残し、消しません。
+- 同じ `proxy/exchange` で中継を 2 つ起動すると、2 つ目は起動しません。
+- **`_record` を手で変えないでください。** 変えるときは先に中継を止めます。
+- **壊れた Case の直し方**：一覧で `problem` が付いた Case は、読むのも書くのも断られます（409）。中継は自動で直しません。直すときは、中継を止め、`_record/history/<Case番号>/` の中から正しい版（`<rev>.json`）を選び、`_record/cases/<Case番号>.json` として置き直して（それより新しい rev の履歴があれば、その履歴を `_record` の外へ移して）から、中継を起動し直します。設定は `settings.json` と `history/_settings/` で同じです。
+- 試験：`proxy` で `python -X utf8 -m unittest test_studio_proxy test_codex_runner test_record_api`（10/25 時点で 110 件 OK・skip 11）。
