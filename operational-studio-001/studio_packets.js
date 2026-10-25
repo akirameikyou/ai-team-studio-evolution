@@ -5,7 +5,15 @@
 (function (global) {
   const ORIGINS = ['SOURCE', 'CONTEXT', 'STATE', 'OBSERVER', 'EVIDENCE', 'REASONING', 'JUDGMENT'];
   const SYNTHESIS_BODY_MAX_CHARS = 30000;
-  const hm = iso => iso ? iso.slice(5, 16).replace('T', ' ') : '';
+  // Times are stored as UTC (toISOString); show them in the computer's local time. Cutting the string showed UTC (9 hours
+  // early in Japan). A value that is not a date is still cut as before.
+  const hm = iso => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d)) return String(iso).slice(5, 16).replace('T', ' ');
+    const p = n => String(n).padStart(2, '0');
+    return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  };
   const oneLine = s => String(s || '').replace(/\s+/g, ' ').trim().slice(0, 200);
 
   function observerBody(raw) {
