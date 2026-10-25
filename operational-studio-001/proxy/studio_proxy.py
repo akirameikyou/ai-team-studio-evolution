@@ -8,14 +8,19 @@ Why it exists:
     the relay writes   exchange/<CASE>/<TASK>/to-<AI>.md
     and the agent writes exchange/<CASE>/<TASK>/from-<AI>.md, which the Studio collects.
 
+  * 3-A: the Studio record can be kept in files next to the relay (exchange/_record, record_store.py), through
+    /record, /record/case and /record/settings. Only pages and programs on this machine may use them.
+
 Binds to 127.0.0.1 only. CORS is limited to localhost and the project's GitHub Pages origin.
 
 Run:  python studio_proxy.py            (port 8787)
       python studio_proxy.py --port 9000
 """
-import argparse, hashlib, json, os, re, sys, tempfile, threading, time, urllib.error, urllib.parse, urllib.request
+import argparse, hashlib, json, os, re, socket, sys, tempfile, threading, time, urllib.error, urllib.parse, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+import record_store
 
 HERE = Path(__file__).resolve().parent
 EXCHANGE = HERE / 'exchange'
@@ -28,6 +33,7 @@ SMALL_SNAPSHOT = 64 * 1024     # 3-2-3: copies up to this size are read for thei
 SNAPSHOT_NAME = re.compile(r'^ats-store-\d{8}T\d{9}Z-r\d+(-\d+)?\.json$')
 LOCAL_ORIGIN = re.compile(r'^https?://(127\.0\.0\.1|localhost)(:\d+)?$')
 _SNAPSHOT_NAME_LOCK = threading.Lock()
+RECORD = None   # 3-A: the open record (record_store.RecordStore); main() opens it. None: /record answers 503.
 
 
 def snapshots_dir():
@@ -244,10 +250,106 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers(); self.wfile.write(body)
 
     def do_OPTIONS(self):
+        if self.is_record_path():
+            if not self.record_gate():
+                return self.record_reply(403, {'error': 'the record is for this computer only'}, cors=False)
         self.send_response(204); self.cors(); self.end_headers()
+
+    # ---- 3-A: the record (RECORD_API_3A.md §3-§5) ----
+    def is_record_path(self):
+        path = urllib.parse.urlparse(self.path).path
+        return path == '/record' or path.startswith('/record/')
+
+    def record_gate(self):
+        """§5: exactly one Host naming this relay, and no Origin or exactly one local Origin."""
+        port = self.server.server_address[1]
+        hosts = self.headers.get_all('Host') or []
+        if len(hosts) != 1 or hosts[0].lower() not in (f'127.0.0.1:{port}', f'localhost:{port}'):
+            return False
+        origins = self.headers.get_all('Origin') or []
+        return not origins or (len(origins) == 1 and bool(LOCAL_ORIGIN.fullmatch(origins[0])))
+
+    def record_reply(self, code, obj, cors=True, close=False):
+        body = json.dumps(obj, ensure_ascii=False).encode('utf-8')
+        self.send_response(code)
+        if cors:
+            self.cors()
+        self.send_header('Content-Type', 'application/json; charset=utf-8'); self.send_header('Content-Length', str(len(body)))
+        if close:
+            self.send_header('Connection', 'close')
+            self.close_connection = True
+        self.end_headers(); self.wfile.write(body)
+
+    def record_get(self, u):
+        if not self.record_gate():
+            return self.record_reply(403, {'error': 'the record is for this computer only'}, cors=False)
+        store = RECORD
+        if store is None:
+            return self.record_reply(503, {'error': 'record_unavailable'})
+        q = urllib.parse.parse_qs(u.query, keep_blank_values=True)
+        try:
+            if u.path == '/record':
+                code, obj = store.listing()
+            elif u.path == '/record/case':
+                ids = q.get('id', [])
+                if len(ids) != 1:
+                    return self.record_reply(400, {'error': 'one id is required'})
+                code, obj = store.read_case(ids[0])
+            elif u.path == '/record/settings':
+                code, obj = store.read_settings()
+            else:
+                code, obj = 404, {'error': 'unknown path'}
+        except record_store.Answer as e:
+            code, obj = e.code, e.body
+        except Exception as e:
+            code, obj = 500, {'error': str(e)}
+        return self.record_reply(code, obj)
+
+    def record_post(self, path):
+        """Every answer closes the connection, and nothing sent after the body is read as a request (§4.1)."""
+        cors = True
+        try:
+            if not self.record_gate():
+                code, obj, cors = 403, {'error': 'the record is for this computer only'}, False
+            elif RECORD is None:
+                code, obj = 503, {'error': 'record_unavailable'}
+            elif path not in ('/record/case', '/record/settings'):
+                code, obj = 404, {'error': 'unknown path'}
+            else:
+                j = record_store.read_body(self.headers, self.rfile, self.connection)
+                code, obj = (RECORD.write_case if path == '/record/case' else RECORD.write_settings)(j)
+        except record_store.Answer as e:
+            code, obj = e.code, e.body
+        except Exception as e:
+            code, obj = 500, {'error': str(e)}
+        try:
+            self.record_reply(code, obj, cors=cors, close=True)
+        except OSError as e:
+            sys.stderr.write(f'[relay] the answer to {path} could not be sent ({code}): {e}\n')
+        self.linger()
+
+    def linger(self):
+        """Close without a reset: bytes the client sent beyond the body are received and dropped, never parsed,
+        for at most LINGER_SECONDS and MAX_BODY bytes (a reset could discard the answer before the client reads it)."""
+        try:
+            self.connection.shutdown(socket.SHUT_WR)
+            end, total = time.monotonic() + record_store.LINGER_SECONDS, 0
+            while total <= record_store.MAX_BODY:
+                left = end - time.monotonic()
+                if left <= 0:
+                    break
+                self.connection.settimeout(left)
+                chunk = self.connection.recv(65536)
+                if not chunk:
+                    break
+                total += len(chunk)
+        except OSError:
+            pass
 
     def do_GET(self):
         u = urllib.parse.urlparse(self.path); q = dict(urllib.parse.parse_qsl(u.query))
+        if self.is_record_path():
+            return self.record_get(u)
         try:
             if u.path == '/health':
                 return self.reply(200, {'ok': True, 'providers': providers(), 'exchange': str(EXCHANGE)})
@@ -314,6 +416,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
+        if self.is_record_path():
+            return self.record_post(path)
         if path == '/snapshot':
             return self.post_snapshot()
         if path != '/task':
@@ -384,9 +488,15 @@ class Handler(BaseHTTPRequestHandler):
         sys.stderr.write('[relay] ' + (fmt % args) + '\n')
 
 
-def main():
-    ap = argparse.ArgumentParser(); ap.add_argument('--port', type=int, default=8787); a = ap.parse_args()
+def main(argv=None):
+    global RECORD
+    ap = argparse.ArgumentParser(); ap.add_argument('--port', type=int, default=8787); a = ap.parse_args(argv)
     load_env(); EXCHANGE.mkdir(exist_ok=True)
+    try:
+        RECORD = record_store.open_store(EXCHANGE / '_record')
+    except record_store.RecordStartError as e:
+        print(f'記録を開けないため中継を起動しません: {e}', file=sys.stderr)
+        sys.exit(2)
     print(f'AI Team Studio relay on http://127.0.0.1:{a.port}  providers={providers()}  exchange={EXCHANGE}')
     ThreadingHTTPServer(('127.0.0.1', a.port), Handler).serve_forever()
 
