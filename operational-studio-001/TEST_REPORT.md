@@ -213,3 +213,13 @@ Claude Code 以外の手で動かした、最初の試験の結果。Claude Code
 - 指摘1（中）：CASE の行を最初の1行しか見ていなかった → すべての CASE の行を調べ、1つでも別の Case なら OTHER_CASE。試験 AS-02 に3件追加、変異 B-26（最初の行だけを見る）を追加。B-25 の find を新しい行に合わせた。
 - 指摘2・3（低）は対応しない（利用者が直すのは指摘1だけと決めた。Claude Code の見立て）：2 は古い・食い違った記録だけの話で表示が壊れる例はない、3 は一覧は最大50件・各 64 KB まで。
 - 結果：test_1b 149/149、test_1c 45/45（1b 149/149）、test_1d 163/163、test_2_1 28/28。変異 1b 24/26（B-17・B-21 は以前から）、1c 13/13。
+
+## 追記：利用者による試験の独立実行（2026-10-24、6ac0d67）
+
+改善 3-2 と Codex 監査の指摘1への対応（3caae58・6ac0d67）の後の、Claude Code 以外の手による試験の結果。Claude Code の自己報告とは分けて記録する。
+
+- 実行者：利用者（自分の PowerShell のターミナル）。Claude Code は、コマンドを示し、ターミナルの表示を読み取っただけ。
+- 版：`6ac0d67`（運用版の作業ツリー `C:/GitHub/ai-team-studio-evolution`、`feature/operational-studio-004`。`feature/operational-studio-006` も同じコミット）。Python の版は、このときの表示に出ておらず、記録していない。
+- コマンド：`python -X utf8 -m unittest discover -s C:/GitHub/ai-team-studio-evolution/operational-studio-001/proxy -p "test_*.py" -v`
+- 結果：**Ran 68 tests in 25.913s、OK (skipped=1)**。skip の1件は、シンボリックリンクを実際に作る試験（WinError 1314：特権がない）で、これまでと同じ。
+- 範囲：Python の試験（`test_studio_proxy`・`test_codex_runner`）だけ。ブラウザの試験・変異試験は、この独立実行には含まれていない（上の Claude Code の自己確認の結果のみ）。
