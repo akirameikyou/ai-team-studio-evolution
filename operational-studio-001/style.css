@@ -71,3 +71,6 @@ dialog::backdrop{background:#1d242c55}
 .howto b{display:block;margin-bottom:2px}.howto span{color:var(--muted)}
 .steps{margin:8px 0 12px;padding-left:20px;line-height:1.9}
 @media (max-width:720px){.howto{grid-template-columns:1fr 1fr}}
+/* 3-B: while the record cannot be written (or this Case conflicts), the work area is read only (RECORD_UI_3B.md 2.3) */
+body.ro #work button:not(.keep), body.ro #work input, body.ro #work textarea, body.ro #work select, body.ro #start button, body.ro #newCaseBtn{pointer-events:none;opacity:.45}
+.save-warn .row{margin-top:8px}

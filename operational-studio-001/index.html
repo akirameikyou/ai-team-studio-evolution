@@ -16,8 +16,8 @@
     <div class="side-bottom">
       <button id="settingsBtn" class="btn ghost wide">AIの接続設定</button>
       <button id="restoreBtn" class="btn ghost wide">記録の写しから戻す</button>
-      <button id="archiveBtn" class="btn ghost wide">書庫（古い Case を移す・戻す）</button>
-      <div class="side-note">保存先：このブラウザ<br>この記録：<span id="recordNote">—</span><br>記録の写し：<span id="backupNote">なし（中継なし）</span><br>保存領域：<span id="storageNote">—</span><br>外部への送信：<span id="netNote">なし</span></div>
+      <button id="archiveBtn" class="btn ghost wide">書庫（Case を戻す）</button>
+      <div class="side-note">保存先：中継の記録の口（3-B）<br>この記録：<span id="recordNote">—</span><br>開いている Case：<span id="backupNote">—</span><br>控え：<span id="storageNote">—</span><br>外部への送信：<span id="netNote">なし</span></div>
     </div>
   </aside>
 
@@ -112,7 +112,7 @@
       <div class="card">
         <div class="card-h"><h2>記録</h2><span class="hint">なぜこの判断になったかを後から追えます</span></div>
         <div id="meter" class="meter"></div>
-        <div class="row"><button id="exportBtn" class="btn">記録をJSONで保存</button><label class="btn">JSONを読み込む<input id="importFile" type="file" accept=".json" hidden></label><button id="mdBtn" class="btn">Markdownで保存</button></div>
+        <div class="row"><button id="exportBtn" class="btn keep">記録をJSONで保存</button><label class="btn">JSONを読み込む<input id="importFile" type="file" accept=".json" hidden></label><button id="mdBtn" class="btn keep">Markdownで保存</button></div>
         <details><summary>経過（自動記録）</summary><ol id="log" class="log"></ol></details>
       </div>
     </section>
@@ -137,6 +137,7 @@
 <script src="studio_state.js?v=3-2-r2"></script>
 <script src="studio_text.js?v=archive-2"></script>
 <script src="studio_packets.js?v=2-4"></script>
-<script src="app.js?v=archive-4"></script>
+<script src="studio_record.js?v=3b-1"></script>
+<script src="app.js?v=3b-1"></script>
 </body>
 </html>

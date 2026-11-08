@@ -270,6 +270,33 @@ test('U-15/U-17 archive: newest per Case by number; the listing must say folder'
   relay.archives = [200, { folder: 'absent', archives: [] }]; eq(await e.takenIds(), [], 'absent: can create');
   relay.archives = [200, { folder: 'present', archives: [{ name: n('') }] }]; eq(await e.takenIds(), [id], 'archived IDs are taken');
 });
+test('U-04 Q-1 right after a new Case: saveNow waits for the write in flight, then answers ok', async () => {
+  const { relay, e } = await setup();
+  const release = relay.hold('POST', '/record/case');
+  const c = C('CASE-20261108-001-aaaaa1'); e.addCase(c); await settle();
+  eq(e.state(c.id), 'sending', 'first write in flight');
+  c.requests = [{ task: 'T-1', packet: 'p', deliveries: [] }]; e.edit(c.id, c);
+  const p = e.saveNow(c.id); await settle(); release();
+  const r = await p;
+  eq(r.ok, true, 'ok after the write in flight and the next one'); eq(relay.cases[c.id].value.requests[0].task, 'T-1', 'the request text is on the relay');
+  eq(relay.posts('/record/case').length, 2, 'two writes, one after the other');
+  const r2 = Relay(); const s2 = await setup(x => x.write(c.id, 0, 'x', C(c.id)));
+  s2.relay.down = true; s2.e.edit(c.id, { ...s2.e.value(c.id), q: 1 });
+  eq((await s2.e.saveNow(c.id)).ok, false, 'relay down: not ok (nothing would be sent to an AI)');
+});
+test('Stale object: an edit of a Case object that was re-read meanwhile is not written; it is kept as own edits', async () => {
+  const id = 'CASE-20261108-001-aaaaa1';
+  const { relay, e, clock } = await setup(r => r.write(id, 0, 'x', C(id)));
+  const old = e.value(id);                                   // the page starts a long job on this object
+  relay.other(id, v => v.question = 'other'); await e.refreshList();
+  eq(e.value(id).question, 'other', 're-read the version of the other screen');
+  old.question = 'late result of the old job'; ok(!e.edit(id, old), 'edit refused');
+  await clock.run(1000); await settle();
+  eq(relay.cases[id].value.question, 'other', 'relay not overwritten'); eq(relay.posts('/record/case').length, 0, 'no write');
+  eq(e.mine(id).question, 'late result of the old job', 'kept as own edits'); eq(e.state(id), 'clean', 'still clean');
+  ok(e.replaceCase(C(id, { question: 'imported' })), 'a JSON import replaces on purpose');
+  await clock.run(1000); await settle(); eq(relay.cases[id].value.question, 'imported', 'import written');
+});
 test('U-12 the cache key is its own; the old record key is never touched', async () => {
   const { storage, e } = await setup(); e.addCase(C('CASE-20261108-001-aaaaa1')); await settle();
   eq(storage.keys(), ['ats-operational-001-3b'], 'only ats-operational-001-3b');

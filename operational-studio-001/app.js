@@ -3,7 +3,6 @@
 // Flow: question -> CASE -> SOURCE -> OBSERVE (independent) -> DIFFERENCE -> SYNTHESIS -> HUMAN GATE -> NEXT
 // The human writes the question and makes the gate decision. Everything else is prepared by the Studio.
 
-const KEY = 'ats-operational-001';
 const STAGES = [['CASE', '問い'], ['SOURCE', '資料'], ['OBSERVE', '観測'], ['DIFFERENCE', '差分'], ['SYNTHESIS', '統合'], ['GATE', '判断'], ['NEXT', '次へ']];
 const ACCESS = ['DIRECT', 'READABLE', 'INACCESSIBLE', 'UNKNOWN'];
 const ORIGINS = StudioPackets.ORIGINS;
@@ -16,8 +15,7 @@ const DEFAULT_OBSERVERS = [
 ];
 
 let store = { version: 1, cases: {}, order: [], currentId: null, settings: { proxyUrl: '', observers: DEFAULT_OBSERVERS.map(o => ({ ...o })) } };
-let saveBlocked = false, pollTimer = null;
-let freshStore = false;      // 2-E: true when the browser had no saved record at startup (first run, or storage cleared)
+let pollTimer = null;
 const DEFAULT_RELAY = 'http://127.0.0.1:8787';
 const $ = id => document.getElementById(id);
 // In-page replacements for confirm()/alert(): some embedded browsers ignore the native dialogs.
@@ -37,288 +35,179 @@ const hm = StudioPackets.hm;
 const cur = () => store.cases[store.currentId] || null;
 const obsSetting = name => store.settings.observers.find(o => o.name === name) || { name, connector: 'manual', route: 'manual' };
 
-// ---------- persistence (never overwrite an unreadable value) ----------
-function load() {
-  let raw = null;
-  try { raw = localStorage.getItem(KEY); } catch (e) { return block('保存領域を読めません。上書きを防ぐため保存を止めています。'); }
-  if (raw == null) { freshStore = true; return; }
-  try {
-    const o = JSON.parse(raw);
-    if (!o || o.version !== 1 || typeof o.cases !== 'object') throw new Error('format');
-    store = o; storage.chars = raw.length;
-  } catch (e) { block('保存データを読めません。上書きを防ぐため保存を止めています（記録のJSON読み込みで復旧できます）。'); }
+// ---------- 3-B (RECORD_UI_3B.md 0.6): the record lives in the relay; this page keeps a view and a cache ----------
+// studio_record.js holds, per Case and for the settings, the version read from the relay and the edits not yet sent.
+// store is the page's view of it (rebuilt by syncStore). The relay URL and what the relay told about its folder are
+// per browser (D-5, RELAY_KEY); the AIs' routes (observers) are the relay's settings. Nothing is written to the old
+// record key ats-operational-001 (U-12). 2-C copies and "move to the archive" are not used here (D-3, D-7).
+const RELAY_KEY = 'ats-operational-001-3b-relay';
+let rec = null, lastObservers = null, shownSig = '';
+function readRelaySettings() {
+  try { const o = JSON.parse(localStorage.getItem(RELAY_KEY) || 'null'); if (o && typeof o === 'object') return o; } catch (_) { }
+  return { proxyUrl: DEFAULT_RELAY, exchangeDir: '', exchangeFor: '' };
 }
-// Returns whether the store was written. Callers that must not continue without a stored record (Q-1) check it.
-function save() {
-  if (saveBlocked) return false;
-  const prevRev = store.rev || 0;
-  store.rev = prevRev + 1;    // 2-C: a revision number for the record copies
-  try { const text = JSON.stringify(store); localStorage.setItem(KEY, text); storage.chars = text.length; backup.saveFailed = false; scheduleBackup(); renderStorageNote(); return true; }
-  catch (e) { store.rev = prevRev; backup.saveFailed = true; flash('保存に失敗しました（' + e.name + '）。' + (e.name === 'QuotaExceededError' ? 'ブラウザの保存領域の上限です。「書庫」で古い Case を中継のフォルダへ移してください。' : '記録をJSONで保存してください。'), true); return false; }
+function writeRelaySettings() {
+  const { proxyUrl, exchangeDir, exchangeFor } = store.settings;
+  try { localStorage.setItem(RELAY_KEY, JSON.stringify({ proxyUrl, exchangeDir: exchangeDir || '', exchangeFor: exchangeFor || '' })); return true; } catch (_) { return false; }
 }
-
-// ---------- 11/8: how full the browser's storage is (Chrome 157: 5,242,880 characters per origin) ----------
-const storage = { chars: null };
-function renderStorageNote() {
-  const el = $('storageNote'); if (!el) return;
-  if (storage.chars == null) { el.textContent = '—'; el.className = ''; return; }
-  const u = StudioText.storageUse(storage.chars, KEY);
-  el.className = u.warn ? 'ng' : '';
-  el.textContent = `${u.percent}%（上限 10 MiB）` + (u.warn ? '。古い Case を「書庫」へ移してください' : '');
+// What a carrier reads without running the screen's rules (section 4.8): computed from the body being written.
+function adoptedFor(c, task) {
+  return StudioState.attempts(c).some(a => a.picked && a.assignment && a.assignment.task === task && (a.outcome === 'adopted' || a.assignmentOutcome === 'adopted'));
 }
-
-// ---------- 2-C: copies of the record in the relay folder ----------
-// After a successful save, and 3 s after the last one, the text actually stored in localStorage (never an unsaved
-// state) is sent to the relay, which keeps every copy as its own file. One copy is in flight at a time; a save during
-// it queues one more. Nothing is sent while saving is blocked. Failures are shown, never hidden.
-// Copies run strictly one after another (a promise chain); runBackup() resolves with the result of *its own* copy,
-// so a caller that must know whether the current record was kept (restore) waits for exactly that copy.
-// At most one copy waits behind the one in flight: a copy reads localStorage when it starts, so a second waiting copy
-// would only repeat it (Codex review of b061274). Each request gives up after timeoutMs, so the chain cannot hang.
-const BACKUP_DELAY = 3000;
-const backup = { timer: null, chain: Promise.resolve(), queued: null, timeoutMs: 20000, last: null, error: null, count: null, totalBytes: null, saveFailed: false, empty: false, ownNames: [] };
-function scheduleBackup() {
-  if (!store.settings.proxyUrl) return renderBackupNote();
-  clearTimeout(backup.timer); backup.timer = setTimeout(runBackup, BACKUP_DELAY);
+function computeCarry(c) {
+  const S = StudioState;
+  const waiting = S.requests(c).filter(q => S.currentRequest(c, q.kind, q.name) === q && !adoptedFor(c, q.task))
+    .map(q => ({ kind: q.kind, name: q.name || null, task: q.task, gen: q.gen, sha256: q.sha256 || null, connector: obsSetting(q.name).connector, delivery: S.deliveryState(q) }));
+  let stage = null, next = '';
+  try { const st = stageState(c).s; stage = (STAGES.find(([k]) => st[k] === 'now') || STAGES.filter(([k]) => st[k] === 'done').pop() || STAGES[0])[0]; next = nextStep(c)[0]; } catch (_) { }
+  return { stage, waiting, next };
 }
-function runBackup() {
-  if (backup.queued) return backup.queued;
-  const p = backup.chain.then(() => { backup.queued = null; return copyOnce(); });
-  backup.queued = p;
-  backup.chain = p.catch(() => {});
-  return p;
+function syncStore() {
+  store.cases = {};
+  for (const id of rec.ids()) { const v = rec.value(id); if (v) store.cases[id] = v; }
+  store.order = rec.order.filter(id => store.cases[id]);
+  store.currentId = rec.currentId && store.cases[rec.currentId] ? rec.currentId : null;
+  const st = rec.value(rec.SETTINGS);
+  if (st && Array.isArray(st.observers) && st.observers.length) store.settings.observers = st.observers;
+  if (lastObservers == null || rec.state(rec.SETTINGS) === 'clean') lastObservers = JSON.stringify(store.settings.observers);
 }
-async function copyOnce() {
-  if (saveBlocked || !store.settings.proxyUrl) { renderBackupNote(); return { ok: false, skipped: true, why: saveBlocked ? '保存が止まっています' : '中継がありません' }; }
-  let text = null;
-  try { text = localStorage.getItem(KEY); } catch (e) { backup.error = { at: now(), why: '保存領域を読めません' }; renderBackupNote(); return { ok: false, why: backup.error.why }; }
-  if (text == null) { renderBackupNote(); return { ok: false, skipped: true, why: 'まだ保存された記録がありません' }; }
-  // 3-2-3: a record with no Case is not copied (an empty copy would become the newest in the list). The relay refuses it too.
-  backup.empty = StudioText.storeCaseCount(text) === 0;
-  if (backup.empty) { renderBackupNote(); return { ok: false, skipped: true, why: '記録が空（Case 0件）のため、写しを保存しません' }; }
-  let rev = 0; try { rev = JSON.parse(text).rev || 0; } catch (_) { }      // the revision of the text being sent, not of a later save
-  const ac = new AbortController(), timer = setTimeout(() => ac.abort(), backup.timeoutMs);
-  try {
-    const r = await fetch(store.settings.proxyUrl.replace(/\/$/, '') + '/snapshot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rev, store: text }), signal: ac.signal })
-      .catch(e => { throw ac.signal.aborted ? new Error(`中継が ${backup.timeoutMs / 1000} 秒以内に応答しません`) : e; });
-    const j = await r.json();
-    if (!r.ok || !j.saved) throw new Error(j.error || 'HTTP ' + r.status);
-    backup.last = { at: now(), name: j.saved, rev }; backup.error = null; backup.ownNames.push(j.saved);
-    if (typeof j.count === 'number') { backup.count = j.count; backup.totalBytes = j.totalBytes; }
-    renderBackupNote(); await checkRecord(); return { ok: true, name: j.saved };
-  } catch (e) { backup.error = { at: now(), why: e.message }; renderBackupNote(); return { ok: false, why: e.message }; }
-  finally { clearTimeout(timer); }
+function startRecord() {
+  const r = readRelaySettings();
+  Object.assign(store.settings, { proxyUrl: r.proxyUrl || DEFAULT_RELAY, exchangeDir: r.exchangeDir || '', exchangeFor: r.exchangeFor || '' });
+  let storageOk = true; try { localStorage.getItem(RELAY_KEY); } catch (_) { storageOk = false; }
+  const storage = storageOk ? localStorage : { getItem: () => { throw new Error('storage blocked'); }, setItem: () => { throw new Error('storage blocked'); } };
+  rec = StudioRecord.create({ fetch: (u, i) => fetch(u, i), storage, computeCarry, onChange: scheduleView, log: t => console.warn('[record]', t) });
+  return rec.start(store.settings.proxyUrl);
 }
-function renderBackupNote() {
-  const el = $('backupNote'); if (!el) return;
-  el.className = backup.error ? 'ng' : '';
-  const size = backup.count != null ? `・写し ${backup.count}件 ${Math.ceil((backup.totalBytes || 0) / 1024)} KB` : '';
-  el.textContent = !store.settings.proxyUrl ? 'なし（中継なし）' : backup.error ? `失敗 ${hm(backup.error.at)}（${backup.error.why}）` : backup.empty ? '保存しません（記録が空）' : backup.last ? `${hm(backup.last.at)}（r${backup.last.rev}${size}）` : '中継へ保存します';
-  renderRecordNote();
+// Many small changes arrive while writing; the full page is redrawn only when what it shows changed in kind (the
+// state of the record, which Case is open, or the open Case was replaced by a re-read), so typing is not interrupted.
+let viewTimer = null;
+function scheduleView() { if (!viewTimer) viewTimer = setTimeout(() => { viewTimer = null; refreshView(); }, 50); }
+function refreshView() {
+  const before = cur();
+  syncStore();
+  const id = store.currentId, sig = [rec.ui.load, rec.canWrite(), id, id && rec.state(id), store.order.join(',')].join('|');
+  if (sig !== shownSig || (before && cur() && before !== cur())) { shownSig = sig; render(); if (!viewTimer) schedulePoll(); }
+  else renderRecordNote();
+  if (rec.ui.load === 'loaded' && !setupDone) initialSetup();
 }
-// ---------- 3-2-4: which record this page holds, and whether another Studio writes to the same relay ----------
-// The check runs in the copy chain (never while a copy of this page is in flight, whose name is not known yet), after
-// each copy and once a minute. A warning stays until the page is reloaded, so it does not vanish at this page's next copy.
-// "A newer copy exists" (before this page wrote any copy) is shown only while it holds: restoring that copy ends it.
-const record = { check: null, warn: '', warnAt: null };
+// save(c): c changed (the open Case unless another is given). save() alone: only the settings, if they changed.
+// Returns whether the change is in the cache and will be written to the relay (false while canWrite is false).
+function save(c) {
+  let ok = true;
+  if (c) ok = rec.edit(c.id, c);
+  const obs = JSON.stringify(store.settings.observers);
+  if (obs !== lastObservers) {
+    const base = rec.value(rec.SETTINGS) || {};
+    if (rec.edit(rec.SETTINGS, { ...base, observers: JSON.parse(obs) })) lastObservers = obs; else ok = false;
+  }
+  if (!ok) flash('保存できません（' + (rec.whyNot() || rec.state(c ? c.id : rec.SETTINGS) || '不明') + '）。画面上部の案内を確認してください。', true);
+  return ok;
+}
+function setCurrent(id) { rec.currentId = id; store.currentId = id; }
+// A per-Case problem (conflict, corrupt, refused) or a record-wide one (load, relay, cache), with what can be done.
+function banner() {
+  const ui = rec.ui, c = cur(), st = c ? rec.state(c.id) : null, L = [], btn = [];
+  if (ui.relay === 'offline') L.push('中継に届きません。記録は読むだけで、保存も送付もできません。届くようになると自動で送り直します' + (ui.checkedAt ? `（${hm(ui.checkedAt)} に確かめました）` : '') + '。');
+  if (ui.load === 'loading') L.push('中継から記録を読み込んでいます。終わるまで読むだけです。');
+  else if (ui.load === 'loadFailed' && ui.relay !== 'offline') L.push('記録を読み込めませんでした（' + (ui.why.load || '不明') + '）。');
+  if (ui.cache === 'failed') L.push('このブラウザの控えに書けないため保存できません（' + (ui.why.cache || '') + '）。この画面を閉じると、保存していない編集が失われます。下の「保存していない編集を JSON で書き出す」で書き出してください。');
+  if (ui.relay === 'offline' || ui.load !== 'loaded' || ui.cache === 'failed') btn.push(['読み直す', () => rec.manualReload()]);
+  if (rec.unsavedExports().length) btn.push(['保存していない編集を JSON で書き出す', exportUnsaved]);
+  if (st === 'conflict') { L.push(`この Case は別の画面で更新されました。読むだけになっています。自分の編集は控えに残っています（自動では混ぜません）。`); btn.push(['最新を読み直す', () => rec.rereadLatest(c.id)], ['自分の編集を JSON で書き出す', exportUnsaved]); }
+  if (st === 'corrupt') L.push('中継の記録のこの Case が壊れています（直し方は README）。読むだけです。');
+  if (st === 'refused') L.push('中継がこの Case の書き込みを受け付けません（' + (ui.why[c.id] || '') + '）。不具合として扱います。記録の JSON を書き出してください。');
+  if (c && rec.mine(c.id) && st === 'clean') { L.push('この Case には、別の画面の更新とぶつかったときの自分の編集が控えに残っています。'); btn.push(['自分の編集を JSON で書き出す', () => download(c.id + '-mine.json', StudioText.caseExportText(rec.mine(c.id), now()), 'application/json')], ['控えを捨てる', async () => { if (await ask('控えに残っている自分の編集を捨てます。中継の記録は変わりません。', '捨てる')) rec.dropDrafts(c.id); }]); }
+  const ns = c && rec.ui.notSent[c.id]; if (ns && ns.length) L.push('送っていない依頼があります：' + ns.map(x => `${x.task}（${x.why}・${hm(x.at)}）`).join('、') + '。保存できる状態に戻ったら「同じ依頼を送り直す」で送れます（自動では送りません）。');
+  return { L, btn };
+}
+function renderBanner() {
+  const w = $('saveWarn'); if (!w) return;
+  const { L, btn } = banner();
+  w.hidden = !L.length; w.innerHTML = L.map(t => `<div>${esc(t)}</div>`).join('') + (btn.length ? '<div class="row">' + btn.map((b, i) => `<button class="btn keep" data-ban="${i}">${esc(b[0])}</button>`).join('') + '</div>' : '');
+  w.querySelectorAll('[data-ban]').forEach(b => b.onclick = () => btn[+b.dataset.ban][1]());
+  const c = cur(), ro = !rec.canWrite() || (c && rec.state(c.id) && !['clean', 'dirty', 'sending'].includes(rec.state(c.id)));
+  document.body.classList.toggle('ro', !!ro);
+}
+function exportUnsaved() {
+  const list = rec.unsavedExports();
+  if (!list.length) return tell('保存していない編集はありません。');
+  for (const x of list) download(x.id + '-unsaved.json', x.text, 'application/json');
+  tell(`${list.length} 件の Case を書き出しました（送っていない依頼の記録も含みます）。「JSONを読み込む」で戻せます。`);
+}
 function renderRecordNote() {
-  const el = $('recordNote'); if (!el) return;
-  const latest = record.check && record.check.latest;
-  el.textContent = `${StudioText.browserLabel(navigator.userAgent)}・Case ${Object.keys(store.cases).length}件・r${store.rev || 0}` + (latest ? `（中継の最新の写し r${latest.rev}）` : '');
-  const w = $('studioWarn'); if (!w) return;
-  const text = record.warn ? record.warn + `（${hm(record.warnAt)} に見つけました。ページを読み込み直すまで表示します）` : record.check && record.check.newer ? record.check.text : '';
-  w.hidden = !text; w.textContent = text;
+  const el = $('recordNote');
+  if (el) { const n = store.order.length, ui = rec.ui;
+    el.textContent = `記録の口・Case ${n}件（中継 ${store.settings.proxyUrl}）` + (ui.load !== 'loaded' ? '・' + (ui.load === 'loading' ? '読み込み中' : '読み込めず') : '') + (ui.relay === 'offline' ? '・中継に届かない' : ''); }
+  const c = cur(), b = $('backupNote');
+  if (b) b.textContent = c ? `この Case r${rec.rev(c.id) || 0}・${({ clean: '保存済み', dirty: '保存待ち', sending: '保存中', unanswered: '答え待ち（送り直します）', conflict: '別の画面の更新とぶつかった', corrupt: '中継の記録が壊れている', refused: '受け付けられない' })[rec.state(c.id)] || '—'}` : '—';
+  const s = $('storageNote'); if (s) s.textContent = rec.ui.cache === 'ok' ? '控え（このブラウザ）に書けます' : '控えに書けません';
+  renderBanner();
 }
-async function checkRecord() {
-  if (!store.settings.proxyUrl) return;
-  const ac = new AbortController(), timer = setTimeout(() => ac.abort(), backup.timeoutMs);
-  let list;
-  try { list = await (await fetch(store.settings.proxyUrl.replace(/\/$/, '') + '/snapshots', { signal: ac.signal })).json(); } catch (_) { return; }
-  finally { clearTimeout(timer); }
-  record.check = StudioText.recordCheck(list.snapshots, { rev: store.rev || 0, ownNames: backup.ownNames });
-  if (record.check.foreign.length) { record.warn = record.check.text; record.warnAt = now(); }
-  renderRecordNote();
-}
-function scheduleRecordCheck() { backup.chain = backup.chain.then(checkRecord).catch(() => {}); }
-async function restoreFromCopy() {
-  if (!store.settings.proxyUrl) return tell('記録の写しは中継のフォルダにあります。先に「AIの接続設定」で中継のURLを入れてください。');
-  const base = store.settings.proxyUrl.replace(/\/$/, '');
-  let list;
-  try { list = await (await fetch(base + '/snapshots')).json(); } catch (e) { return tell('中継に届きません（' + e.message + '）'); }
-  if (!list.snapshots || !list.snapshots.length) return tell('記録の写しはまだありません。');
-  const name = await pickCopy(list);
-  if (!name) return;
-  let text;
-  try { text = (await (await fetch(base + '/snapshot?' + new URLSearchParams({ name }))).json()).text; } catch (e) { return tell('写しを読めません（' + e.message + '）'); }
-  const p = StudioText.parseStoreSnapshot(text);
-  if (p.error) return tell('この写しは使えません：' + p.error);
-  const nowCount = Object.keys(store.cases).length, newCount = Object.keys(p.store.cases).length;
-  // Copies are made from what was saved. After a failed save the screen holds more than that, and it would be lost.
-  const unsaved = backup.saveFailed ? '\n\n注意：最後の保存に失敗しています。画面に出ている今の内容のうち、保存できなかった分は写しに入りません。必要なら先に「記録をJSONで保存」で書き出してください。' : '';
-  if (!(await ask(`今の記録（Case ${nowCount}件）を、写し ${name}（Case ${newCount}件）で置き換えます。\n${nowCount ? '今の記録は、先に写しとして保存します。' : '今の記録は空（Case 0件）なので、写しは保存しません。'}${unsaved}`, '置き換える'))) return;
-  // Keep the current record as one more copy first. A record with no Case is not copied (3-2-3: it would become the
-  // newest copy in the list); its settings are lost then. The copy waits for any copy already in flight and reports its own result.
-  if (!saveBlocked) {
-    clearTimeout(backup.timer);
-    const kept = await runBackup();
-    if (!kept.ok && !kept.skipped && !(await ask('今の記録の写しを保存できませんでした（' + kept.why + '）。それでも置き換えますか？', '置き換える'))) return;
-  }
-  if (saveBlocked) { if (!(await ask('保存が止まっています。写しの内容で保存を再開しますか？（読めなかった保存データは上書きされます）'))) return; saveBlocked = false; $('saveWarn').hidden = true; }
-  const prev = store;
-  store = p.store;
-  if (!save()) { store = prev; render(); return tell('戻した記録を保存できませんでした。今の記録はそのままです（画面の警告を確認してください）。'); }
-  render(); schedulePoll();
-  tell(`写し ${name} から戻しました（Case ${newCount}件）。`);
-}
-// ---------- 11/8: the Case archive (exchange/_archive in the relay folder) ----------
-// A Case leaves this browser only after the relay wrote its file, the file was read back, and it equals what was sent
-// (the text and its SHA-256), and only if the Case did not change meanwhile. The record keeps a heading for it
-// (store.archived). Bringing it back reads that file; archive files are never deleted.
+function renderBackupNote() { renderRecordNote(); }
+function renderStorageNote() { }
+// ---------- the archive, read only here (section 7.1): list from the relay, bring a Case back through the record API ----------
 const relayBase = () => store.settings.proxyUrl.replace(/\/$/, '');
-async function archiveOne(c) {
-  const snap = JSON.stringify(c), text = StudioText.caseExportText(c, now());
-  const local = await sha256Hex(new TextEncoder().encode(text));
-  const r = await fetch(relayBase() + '/archive', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: c.id, text }) });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok || !j.saved) throw new Error(j.error || 'HTTP ' + r.status);
-  if (local && j.sha256 !== local) throw new Error('中継が書いた内容のハッシュが、送った内容と違います');
-  const b = await (await fetch(relayBase() + '/archive?' + new URLSearchParams({ name: j.saved }))).json();
-  if (b.text !== text || b.sha256 !== j.sha256) throw new Error('読み戻した書庫のファイルが、送った内容と一致しません');
-  return { entry: StudioText.archiveEntry(c, StudioText.archiveSaved(j), now()), snap };
+async function openArchive() {
+  const a = await rec.archives();
+  if (!a.ok) return tell('書庫を読めません（' + a.why + '）。');
+  const d = document.createElement('dialog');
+  d.innerHTML = `<h2>書庫（中継の exchange/_archive）</h2>
+    <p class="hint">004 の画面が古い Case を移した場所です。この画面からは移しません（記録は中継にあるため）。戻すと、記録の口に書きます。書庫のファイルは消えません。${a.folder === 'absent' ? '<br>書庫はまだありません。' : ''}</p>
+    <div style="max-height:56vh;overflow:auto">${a.rows.map(r => `<div class="row"><button class="btn" data-back="${esc(r.name)}" data-id="${esc(r.id)}">戻す</button><span>${esc(r.id)} <small>${esc(r.name)}・${Math.ceil((r.bytes || 0) / 1024)} KB${store.cases[r.id] ? '・記録の口に同じ番号の Case があります（別の Case かもしれません）' : ''}</small></span></div>`).join('') || '<p class="hint">書庫に Case はありません</p>'}</div>
+    <div class="row end"><button class="btn" value="close">閉じる</button></div>`;
+  document.body.appendChild(d); d.showModal();
+  const close = () => { d.close(); d.remove(); };
+  d.querySelector('[value=close]').onclick = close; d.addEventListener('cancel', () => d.remove());
+  d.querySelectorAll('[data-back]').forEach(b => b.onclick = async () => { close(); await restoreArchived(b.dataset.id, b.dataset.back); });
 }
-async function archiveCases(ids, progress) {
-  const done = [], failed = [];
-  for (let i = 0; i < ids.length; i++) {
-    const id = ids[i], c = store.cases[id]; if (!c) continue;
-    if (progress) progress(i + 1, ids.length);
-    try { done.push(await archiveOne(c)); }
-    catch (e) {
-      failed.push(`${id}：${e.message}`);
-      // fetch() rejects with a TypeError when the relay cannot be reached: the rest would only wait and fail the same way.
-      if (e instanceof TypeError) { if (i + 1 < ids.length) failed.push(`中継に届かないため、残りの ${ids.length - i - 1} 件は試していません`); break; }
-    }
-  }
-  // A reply collected while the file was being written would be lost: such a Case stays (its file stays in the archive too).
-  const moved = done.filter(d => { const ok = store.cases[d.entry.id] && JSON.stringify(store.cases[d.entry.id]) === d.snap;
-    if (!ok) failed.push(`${d.entry.id}：書き出しの途中で Case が変わったため、移していません`); return ok; }).map(d => d.entry);
-  if (!moved.length) return { moved, failed };
-  const prev = { cases: { ...store.cases }, order: [...store.order], archived: [...(store.archived || [])], currentId: store.currentId };
-  for (const e of moved) { delete store.cases[e.id]; store.order = store.order.filter(x => x !== e.id); if (store.currentId === e.id) store.currentId = null; }
-  store.archived = [...(store.archived || []), ...moved];
-  if (!save()) {
-    Object.assign(store, prev); render();
-    return { moved: [], failed: [...failed, '記録を保存できなかったため、どの Case も移していません（書庫のファイルは中継に残っています）'] };
-  }
-  render(); schedulePoll();
-  return { moved, failed };
-}
-async function restoreArchived(id) {
-  const a = (store.archived || []).find(x => x.id === id); if (!a) return;
-  if (store.cases[id]) return tell(id + ' は既に記録にあります。');
-  let b, name = a.name;
-  try {
-    // A heading without a file name (should not happen) falls back to the newest archive file of the Case.
-    if (!name) { const l = await (await fetch(relayBase() + '/archives')).json(); const hit = (l.archives || []).find(x => x.id === id); name = hit && hit.name; }
-    if (!name) return tell(`書庫に ${id} のファイルが見つかりません。`);
-    b = await (await fetch(relayBase() + '/archive?' + new URLSearchParams({ name }))).json();
-  } catch (e) { return tell('書庫を読めません（' + e.message + '）'); }
-  if (typeof b.text !== 'string') return tell(`書庫のファイルがありません：${name}` + (b.error ? `（${b.error}）` : ''));
-  if (a.sha256 && b.sha256 !== a.sha256 && !(await ask('書庫のファイルが、移したときの内容と違います（SHA-256 が一致しません）。それでも戻しますか？', '戻す'))) return;
+async function restoreArchived(id, name) {
+  let b;
+  try { const r = await fetch(relayBase() + '/archive?' + new URLSearchParams({ name })); b = await r.json(); if (!r.ok) throw new Error(b.error || 'HTTP ' + r.status); }
+  catch (e) { return tell('書庫を読めません（' + e.message + '）'); }
+  const h = typeof b.text === 'string' ? await sha256Hex(new TextEncoder().encode(b.text)) : null;
+  if (typeof b.text !== 'string' || (h && b.sha256 !== h)) return tell('書庫のファイルの中身と SHA-256 が一致しません。戻しません。');
   const p = StudioText.parseCaseExport(b.text, id);
   if (p.error) return tell('戻せません：' + p.error);
-  const prev = { order: [...store.order], archived: [...store.archived] };
-  store.cases[id] = p.case; store.order = StudioText.orderWith(store.order, store.cases, id); store.archived = store.archived.filter(x => x.id !== id);
-  if (!save()) { delete store.cases[id]; store.order = prev.order; store.archived = prev.archived; render(); return tell('戻した Case を保存できませんでした（保存領域の上限かもしれません）。記録は元のままです。'); }
-  render(); tell(`${id} を書庫から戻しました（書庫のファイルは残っています）。`);
+  return putCase(p.case, '書庫から戻す');
 }
-function busyCaseIds() {
-  const keys = [...inFlight].map(String);
-  // obsKey is 'obs:<Case>:<Task>': match the whole Case ID, so an old ID (CASE-…-001) is not taken as a newer one's prefix.
-  return Object.values(store.cases).filter(c => keys.some(k => k.startsWith('obs:' + c.id + ':')) || StudioState.requests(c).some(q => inFlight.has(q.requestId))).map(c => c.id);
+// A Case from a JSON file or the archive: a new one is written with baseRev 0, an existing one only after asking (section 4.6).
+async function putCase(c, how, notSent) {
+  if (!rec.canWrite()) return tell('今は書けません（' + rec.whyNot() + '）。');
+  const old = store.cases[c.id];
+  if (old) {
+    if (!(await ask(`${c.id} は記録の口にあります。\n\n今：${oneLine(old.question).slice(0, 60)}（作成 ${hm(old.createdAt)}）\n読み込む：${oneLine(c.question).slice(0, 60)}（作成 ${hm(c.createdAt)}）\n\n読み込んだ内容で置き換えますか？（前の版は中継の履歴に残ります）`, '置き換える'))) return;
+    log(c, how + '（置き換え）');
+    if (!rec.replaceCase(c)) return tell('置き換えられませんでした（' + (rec.whyNot() || rec.state(c.id)) + '）。');
+  } else {
+    log(c, how);
+    if (!rec.addCase(c)) return tell('書けませんでした（' + (rec.whyNot() || '不明') + '）。');
+  }
+  if (notSent) rec.restoreNotSent(c.id, notSent);
+  setCurrent(c.id); syncStore(); render();
 }
-async function openArchive() {
-  if (!store.settings.proxyUrl) return tell('書庫は中継のフォルダ（exchange/_archive）にあります。先に「AIの接続設定」で中継のURLを入れてください。');
-  if (saveBlocked) return tell('保存が止まっているため、書庫は使えません。');
-  const rows = StudioText.archiveRows(store, busyCaseIds()), total = storage.chars || 0;
-  const arch = (store.archived || []).slice().sort((x, y) => String(y.createdAt || '').localeCompare(String(x.createdAt || '')));
-  const kchars = n => (n / 10000).toFixed(1) + '万字';
-  const d = document.createElement('dialog');
-  d.innerHTML = `<h2>書庫（古い Case を中継のフォルダへ移す）</h2>
-    <p>このブラウザの保存領域：<b id="arUse"></b></p>
-    <p class="hint">移した Case は中継の <code>exchange/_archive</code> に 1 件 1 ファイル（「記録をJSONで保存」と同じ形）で残り、この記録には見出しだけが残ります。下の「書庫にある Case」からいつでも戻せます。書庫のファイルは消しません。送付中の Case は移せません。</p>
-    <div style="max-height:46vh;overflow:auto"><table class="tbl"><thead><tr><th></th><th>作成</th><th>問い</th><th>大きさ</th><th>判断</th></tr></thead><tbody>
-    ${rows.map(r => `<tr><td><input type="checkbox" data-id="${esc(r.id)}" data-chars="${r.chars}"${r.busy ? ' disabled title="送付中"' : ''}></td><td>${esc(r.createdAt.slice(0, 10))}</td><td>${esc(r.title)}${r.current ? '（開いている Case）' : ''}${r.busy ? '（送付中）' : ''}<br><small>${esc(r.id)}</small></td><td>${kchars(r.chars)}</td><td>${esc(r.gate)}</td></tr>`).join('')}
-    </tbody></table></div>
-    <h3>書庫にある Case（${arch.length} 件）</h3>
-    <div style="max-height:20vh;overflow:auto">${arch.map(a => `<div class="row"><button class="btn" data-back="${esc(a.id)}">戻す</button><span>${esc(String(a.createdAt || '').slice(0, 10))} ${esc(a.title)} <small>${esc(a.id)}・${Math.ceil((a.bytes || 0) / 1024)} KB</small></span></div>`).join('') || '<p class="hint">まだありません</p>'}</div>
-    <div class="row end"><button class="btn" value="close">閉じる</button><button class="btn primary" value="move" disabled>選んだ Case を書庫へ移す</button></div>`;
-  document.body.appendChild(d); d.showModal();
-  const boxes = [...d.querySelectorAll('input[data-id]')], moveBtn = d.querySelector('[value=move]');
-  const update = () => {
-    const sel = boxes.filter(b => b.checked), freed = sel.reduce((n, b) => n + +b.dataset.chars, 0);
-    const nowU = StudioText.storageUse(total, KEY), after = StudioText.storageUse(Math.max(0, total - freed), KEY);
-    d.querySelector('#arUse').textContent = `${nowU.percent}%（上限 10 MiB）` + (sel.length ? ` → 移すと約 ${after.percent}%（${sel.length} 件・${kchars(freed)}）` : '');
-    moveBtn.disabled = !sel.length;
-  };
-  boxes.forEach(b => b.onchange = update); update();
-  const close = () => { d.close(); d.remove(); };
-  d.querySelector('[value=close]').onclick = close;
-  d.addEventListener('cancel', () => d.remove());
-  d.querySelectorAll('[data-back]').forEach(b => b.onclick = async () => { close(); await restoreArchived(b.dataset.back); });
-  moveBtn.onclick = async () => {
-    const ids = boxes.filter(b => b.checked).map(b => b.dataset.id);
-    if (!(await ask(`${ids.length} 件の Case を書庫（中継の exchange/_archive）へ移します。\n中継が書いたファイルを読み戻して一致を確かめてから、このブラウザの記録から外します。`, '移す'))) return;
-    moveBtn.disabled = true; moveBtn.textContent = '移しています…';
-    const r = await archiveCases(ids, (n, all) => { moveBtn.textContent = `移しています… ${n}/${all}`; });
-    close();
-    tell(`書庫へ移した Case：${r.moved.length} 件。保存領域は ${StudioText.storageUse(storage.chars || 0, KEY).percent}% です。` + (r.failed.length ? `\n\n移していないもの：\n${r.failed.join('\n')}` : ''));
-  };
-}
-
-// ---------- 2-E: start configured after the browser's storage was cleared ----------
-// Fetches the default settings from the relay (proxy/studio.config.json; no secrets) and stores them. Cases are never
-// touched. Returns { ok, why }.
+// ---------- 2-E: the AIs' routes when the record's settings are empty (a new record) ----------
 async function loadDefaults(base) {
   let cfg;
   try { const r = await fetch((base || DEFAULT_RELAY).replace(/\/$/, '') + '/studio-config'); if (!r.ok) throw new Error('HTTP ' + r.status); cfg = await r.json(); }
   catch (e) { return { ok: false, why: '中継から初期設定を読めません（' + e.message + '）' }; }
   const s = StudioText.studioSettingsFrom(cfg);
   if (s.error) return { ok: false, why: s.error };
-  store.settings.proxyUrl = s.settings.proxyUrl; store.settings.observers = s.settings.observers;
+  store.settings.observers = s.settings.observers;     // D-5: the relay URL stays this browser's own (never the config's)
   if (!save()) return { ok: false, why: '設定を保存できませんでした' };
-  render(); renderBackupNote(); schedulePoll();
+  render(); schedulePoll();
   return { ok: true };
 }
-// On a fresh browser: load the defaults, then offer the newest record copy (if any). Nothing happens on a browser that
-// already has a record, so a person's own settings are never replaced at startup.
+let setupDone = false;
 async function initialSetup() {
-  if (!freshStore || saveBlocked) return;
-  let d = await loadDefaults();
-  for (let i = 0; !d.ok && i < 5; i++) { await new Promise(z => setTimeout(z, 2000)); d = await loadDefaults(); }   // the relay may start a moment later
-  if (!d.ok) { $('netNote').textContent = 'なし（' + d.why + '）'; return; }
-  let list = null;
-  try { list = await (await fetch(store.settings.proxyUrl + '/snapshots')).json(); } catch (_) { }
-  const pick = list && list.snapshots ? StudioText.copyChoices(list.snapshots) : null, best = pick && pick.list[pick.selected];
-  if (list && list.snapshots && list.snapshots.length
-      && await ask(`このブラウザには記録がありませんでした。初期設定（中継・各AIの渡し方）を読み込みました。\n\n中継に記録の写しが ${list.total} 件あります（${best ? `空でない最新 ${best.name}` : '表示した分はすべて空です'}）。写しから記録を戻しますか？`, '写しを選ぶ'))
-    await restoreFromCopy();
+  setupDone = true;
+  const st = rec.value(rec.SETTINGS);
+  if (st && Array.isArray(st.observers) && st.observers.length) return;
+  const d = await loadDefaults(store.settings.proxyUrl);
+  if (!d.ok) $('netNote').textContent = 'なし（' + d.why + '）';
 }
-// 3-2-3: empty copies (Case 0件, or a tiny copy from a relay that does not count) are marked and never preselected.
-function pickCopy(list) {
-  const { list: rows, selected } = StudioText.copyChoices(list.snapshots);
-  return new Promise(res => {
-    const d = document.createElement('dialog');
-    d.innerHTML = `<p>戻す写しを選んでください（新しい順。全 ${list.total} 件のうち ${list.snapshots.length} 件）</p><p class="hint">${esc(list.dir || '')}<br>「空」の写しは Case の入っていない記録です。最初からは選んでいません${selected < 0 ? '（空でない写しが一覧にありません）' : ''}。</p>
-      <select id="copyPick" size="8" style="min-width:420px">${rows.map((s, i) => `<option value="${esc(s.name)}"${i === selected ? ' selected' : ''}>${esc(s.name)}（${Math.ceil(s.bytes / 1024)} KB${s.cases != null ? `・Case ${s.cases}件` : ''}${s.nearEmpty ? '・空' : ''}）</option>`).join('')}</select>
-      <div class="row end"><button class="btn" value="no">やめる</button><button class="btn primary" value="ok">この写しを使う</button></div>`;
-    document.body.appendChild(d); d.showModal();
-    d.querySelectorAll('button').forEach(b => b.onclick = () => { const v = d.querySelector('#copyPick').value; if (b.value === 'ok' && !v) return; d.close(); d.remove(); res(b.value === 'ok' ? v : null); });
-    d.addEventListener('cancel', () => { d.remove(); res(null); });
-  });
-}
-function block(msg) { saveBlocked = true; setTimeout(() => flash(msg, true), 0); }
 // Save problems get their own banner at the top of the page (render() never overwrites it).
-function flash(msg, bad) { if (bad) { const w = $('saveWarn'); w.textContent = msg; w.hidden = false; } }
+function flash(msg, bad) { if (bad) { const w = $('studioWarn'); w.textContent = msg; w.hidden = false; setTimeout(() => { if (w.textContent === msg) w.hidden = true; }, 15000); } }
 function log(c, t) { c.log.push({ at: now(), t }); }
 function bump(c, k, n = 1) { c.metrics[k] = (c.metrics[k] || 0) + n; }
 
@@ -332,8 +221,9 @@ function randomSuffix() {
   return out.join('');
 }
 async function newCaseId() {
+  const taken = await rec.takenIds();                   // 3-B D-11: the record and the archive, as read just now
+  if (!taken) return { id: null, why: '書庫の一覧を読めないため、Case 番号が重ならないか確かめられません。Case は作りません。' };
   for (let i = 0; i < 5; i++) {
-    const taken = StudioText.knownCaseIds(store);      // 11/8: archived Cases keep their numbers
     const id = StudioText.caseIdFor(new Date(), taken, randomSuffix());
     if (taken.includes(id)) continue;
     if (!store.settings.proxyUrl) return { id, checked: false };
@@ -347,10 +237,11 @@ async function newCaseId() {
 }
 // 2-1A: the premise is added before anything is sent, because relay-connected AIs get their task at creation.
 async function createCase(question, observerNames, premise) {
+  if (!rec.canWrite()) return tell('今は Case を作れません（' + rec.whyNot() + '）。');
   const pre = premise && premise.text.trim() ? await makeTextSource('S1', premise.title, premise.text) : null;
   if (pre && pre.error) return tell(pre.error);
   const nid = await newCaseId();
-  if (!nid.id) return tell('重ならない Case 番号を作れませんでした。もう一度「始める」を押してください。');
+  if (!nid.id) return tell(nid.why || '重ならない Case 番号を作れませんでした。もう一度「始める」を押してください。');
   const c = {
     id: nid.id, question: question.trim(), createdAt: now(), sources: StudioText.extractSources(question, { bareNames: false }),   // 1d-1: file names in the question are not SOURCEs
     observers: observerNames, tasks: {}, synthesis: null, gate: null, gateHistory: [], next: null,
@@ -360,8 +251,8 @@ async function createCase(question, observerNames, premise) {
   log(c, `問いを受け取り、CASEを作成（資料 ${c.sources.length}件${pre ? '・うち前提資料の本文 1件' : '・本文から取り出し'}）`);
   if (store.settings.proxyUrl && !nid.checked) log(c, 'Case 番号が中継のフォルダと重ならないかは確かめられませんでした（乱数の部分で区別しています）');
   for (const name of observerNames) c.tasks[name] = { taskId: c.id + '-OBS-' + name.replace(/\W+/g, ''), sentAt: null, sendStatus: null, result: null };
-  store.cases[c.id] = c; store.order.unshift(c.id); store.currentId = c.id;
-  save(); render();
+  if (!rec.addCase(c)) return tell('Case を書けませんでした（' + (rec.whyNot() || '不明') + '）。');
+  setCurrent(c.id); syncStore(); render();
   verifySources(c);         // automatic, no human step
   autoDispatch(c);          // relay-connected AIs get their task immediately
 }
@@ -386,7 +277,7 @@ async function verifySources(c) {
       s.verifyNote = 'Studioからは取得できず（' + e.message + '）。存在は未確認'; log(c, `${s.id} はStudioから取得できず — 未確認のまま`);
     }
   }
-  save(); render();
+  save(c); render();
 }
 async function makeTextSource(id, title, text) {
   const bytes = new TextEncoder().encode(String(text));
@@ -463,18 +354,25 @@ async function assignAttempt(c, attemptId, value) {
   const a = StudioState.attempts(c).find(x => x.attemptId === attemptId);
   if (kind === 'RESULT' && r.outcome === 'adopted') updateAccess(c, name);
   log(c, `受信 ${attemptId} を ${targetLabel(a)} に割り当て（${r.outcome}）` + (a.assignment.acknowledged ? `・確認のうえ（${a.assignment.acknowledged.join(', ')}・${Array.from(String(a.raw || '')).length} 字）` : ''));
-  save(); render();
+  save(c); render();
 }
 function setConfirm(c, attemptId, item, action) {
   StudioState.setConfirmation(c, attemptId, item, action, now(), 'screen');
   log(c, `${action === 'confirm' ? '確認' : '確認を取り消し'}: ${item}（受信 ${attemptId}）`); bump(c, 'gate');
-  save(); render();
+  save(c); render();
 }
 
 // ---------- dispatch ----------
 // 1c: the request text is generated once, stored as a request record (Q-1), then delivered. Every delivery attempt is
 // appended to that record (Q-2). A failed delivery is sent again with the same Task ID and text (Q-3), never regenerated.
 const KIND = { observe: 'OBS', synth: 'SYN', next: 'NEXT' };
+// 3-B D-12: a request that was not sent because it could not be stored first is "unsent" with a reason in notSent
+// (nothing is written into the Case). It can be sent again like a failed one, by a person, never automatically.
+function canResend(c, kind, name) {
+  const S = StudioState, req = S.currentRequest(c, kind, name); if (!req) return false;
+  const st = S.deliveryState(req);
+  return st === 'failed' || (st === 'unsent' && (rec.ui.notSent[c.id] || []).some(x => x.task === req.task));
+}
 // Requests being delivered (by request ID) and first observation requests being prepared (by Case and Task ID).
 // A second click while one is in flight does nothing, so the same request is never sent twice in parallel (Codex C43).
 const inFlight = new Set();
@@ -483,7 +381,7 @@ const obsKey = (c, n) => 'obs:' + c.id + ':' + c.tasks[n].taskId;
 const obsSending = (c, n) => inFlight.has(obsKey(c, n)) || isSending(StudioState.currentRequest(c, 'OBS', n));
 async function send(c, name, kind) {
   const S = StudioState;
-  if (kind === 'observe' && !c.tasks[name].sentAt && S.canRetry(c, 'OBS', name)) return retrySend(c, 'OBS', name);   // first send failed: same request again
+  if (kind === 'observe' && !c.tasks[name].sentAt && canResend(c, 'OBS', name)) return retrySend(c, 'OBS', name);   // first send failed: same request again
   const key = kind === 'observe' && !c.tasks[name].sentAt ? obsKey(c, name) : null;
   if (key) { if (inFlight.has(key)) return; inFlight.add(key); }
   try { return await prepareAndDeliver(c, name, kind); } finally { if (key) { inFlight.delete(key); render(); } }
@@ -508,7 +406,7 @@ async function prepareAndDeliver(c, name, kind) {
 }
 async function retrySend(c, kind, name) {
   const req = StudioState.currentRequest(c, kind, name);
-  if (!req || StudioState.deliveryState(req) !== 'failed') return tell('送り直せる依頼がありません（送付に失敗した今の依頼だけを送り直せます）');
+  if (!req || !canResend(c, kind, name)) return tell('送り直せる依頼がありません（送付に失敗した、または送っていない今の依頼だけを送り直せます）');
   return deliver(c, req, true);
 }
 async function deliver(c, req, retry) {
@@ -519,14 +417,17 @@ async function deliver(c, req, retry) {
 async function deliverOnce(c, req, retry) {
   const name = req.name, os = obsSetting(name), conn = Connectors[os.connector] || Connectors.manual;
   const what = req.kind === 'OBS' ? '観測' : req.kind === 'SYN' ? '統合' : '実行';
-  // Q-1: nothing leaves the Studio unless its request text is stored. If the store cannot be written, stop here and
-  // record the attempt as failed, so the same request can be sent again once saving works (Codex C42).
-  if (!save()) {
-    StudioState.recordDelivery(c, req.requestId, { at: now(), status: 'failed', connector: os.connector, error: '依頼文を保存できないため送付しませんでした', retry });
-    log(c, `${name} への${what}の依頼 ${req.task} を送りませんでした（依頼文をこのブラウザに保存できないため）`);
-    tell('依頼文をこのブラウザに保存できないため、送付を止めました（保存してから送る決まりです）。画面上部の警告を確認し、「記録をJSONで保存」で記録を退避してください。保存できる状態に戻ったら「同じ依頼を送り直す」で送れます。');
+  // Q-1 (3-B section 4.2): nothing leaves the Studio unless the Case holding its request text has a 200 from the relay.
+  // If not, nothing is written into the Case (it is read only then, D-12): the reason goes to notSent and the banner,
+  // and the same request is sent again only when a person presses "同じ依頼を送り直す".
+  save(c);
+  const kept = await rec.saveNow(c.id);
+  if (!kept.ok) {
+    rec.noteNotSent(c.id, { task: req.task, at: now(), why: kept.why || '保存できません' });
+    tell(`${name} への${what}の依頼 ${req.task} を送りませんでした（${kept.why}）。保存してから送る決まりです。依頼文は画面と控えに残っています。保存できる状態に戻ったら「同じ依頼を送り直す」で送れます（自動では送りません）。`);
     render(); return;
   }
+  rec.clearNotSent(c.id, req.task);
   try {
     const res = await conn.send({ caseId: c.id, taskId: req.task, observer: os, packet: req.packet, proxyUrl: store.settings.proxyUrl });
     StudioState.recordDelivery(c, req.requestId, { at: now(), status: res.status, connector: os.connector, retry,
@@ -544,7 +445,7 @@ async function deliverOnce(c, req, retry) {
     log(c, `${name} への${what}の依頼 ${req.task} の送付に失敗（${e.message}）。依頼文は保存済みで、同じ依頼を送り直せます`);
     tell(name + ' へ送れませんでした: ' + e.message + '\n依頼文は保存されています。原因を直してから「同じ依頼を送り直す」を押してください。');
   }
-  save(); render(); schedulePoll();
+  save(c); render(); schedulePoll();
 }
 // Show the stored request text (never regenerated). Copying it again is recorded in the log only; nothing else changes.
 function showRequest(c, kind, name) {
@@ -565,7 +466,7 @@ function showRequest(c, kind, name) {
     if (b.value === 'copy') {
       let ok = false; try { await navigator.clipboard.writeText(text); ok = true; } catch (_) { const ta = d.querySelector('textarea'); ta.select(); try { ok = document.execCommand('copy'); } catch (__) { } }
       b.textContent = ok ? 'コピーしました' : 'コピーできません。上の本文を手で選んでコピーしてください';
-      if (ok) { bump(c, 'copy'); log(c, `依頼文を再コピー ${task}（保存済みの本文${req && req.sha256 ? '・SHA-256 ' + req.sha256.slice(0, 8) + '…' : ''}。新しい依頼ではありません）`); save(); render(); }
+      if (ok) { bump(c, 'copy'); log(c, `依頼文を再コピー ${task}（保存済みの本文${req && req.sha256 ? '・SHA-256 ' + req.sha256.slice(0, 8) + '…' : ''}。新しい依頼ではありません）`); save(c); render(); }
       return;
     }
     d.close(); d.remove();
@@ -600,7 +501,7 @@ function showAgentGuide(c, kind, name) {
     if (b.value === 'copy') {
       let ok = false; try { await navigator.clipboard.writeText(text); ok = true; } catch (_) { const ta = d.querySelector('textarea'); ta.select(); try { ok = document.execCommand('copy'); } catch (__) { } }
       b.textContent = ok ? 'コピーしました' : 'コピーできません。上の文面を手で選んでコピーしてください';
-      if (ok) { bump(c, 'copy'); log(c, `${name} への指示（ファイル受け渡し）をコピー：${p.toFile}`); save(); render(); }
+      if (ok) { bump(c, 'copy'); log(c, `${name} への指示（ファイル受け渡し）をコピー：${p.toFile}`); save(c); render(); }
       return;
     }
     d.close(); d.remove();
@@ -618,7 +519,7 @@ let collectQueue = Promise.resolve(0);
 const runnerStates = new Map();
 const runnerOf = (c, taskId) => runnerStates.get(c.id + '|' + taskId) || null;
 const received = (c, taskId) => StudioState.attempts(c).some(a => a.expectedTask === taskId);   // a receipt for this Task exists
-function collectAll(c, quiet) { const run = collectQueue.then(() => collectOnce(c, quiet)); collectQueue = run.catch(() => 0); return run; }
+function collectAll(c, quiet) { if (!rec.canWrite()) return Promise.resolve(0); const run = collectQueue.then(() => collectOnce(c, quiet)); collectQueue = run.catch(() => 0); return run; }
 async function collectOnce(c, quiet) {
   if (!store.settings.proxyUrl) return 0; let got = 0;
   // Keep polling a task until a structured reply is adopted for it (A-01 over the relay: a failed, late or informal
@@ -646,7 +547,7 @@ async function collectOnce(c, quiet) {
       if (text && !seen(taskId, text)) { await receiveText(c, text, 'ローカル中継', taskId, ran); bump(c, 'autoReceive'); got++; } }
     catch (e) { if (!quiet) log(c, `${n} の回収に失敗（${e.message}）`); }
   }
-  if (got) { save(); render(); }
+  if (got) { save(c); render(); }
   else if (shown) render();   // only the runner's state changed: show it; nothing is saved
   return got;
 }
@@ -678,7 +579,7 @@ function nextStep(c) {
   if (pend.length) {
     const unv = c.sources.filter(s => s.kind === 'ファイル' && !s.verified);
     if (unv.length) acts.push(['手元のファイルを確かめる', () => $('srcFile').click(), true]);
-    for (const x of pend) acts.push(obsSending(c, x) ? [`${x}：送付中…`, () => { }] : [S.canRetry(c, 'OBS', x) ? `${x} へ同じ依頼を送り直す` : obsSetting(x).connector === 'manual' ? `${x} への依頼をコピー` : `${x} へ送る`, () => send(c, x, 'observe'), !unv.length]);
+    for (const x of pend) acts.push(obsSending(c, x) ? [`${x}：送付中…`, () => { }] : [canResend(c, 'OBS', x) ? `${x} へ同じ依頼を送り直す` : obsSetting(x).connector === 'manual' ? `${x} への依頼をコピー` : `${x} へ送る`, () => send(c, x, 'observe'), !unv.length]);
     const pre = unv.length ? `資料 ${unv.map(s => s.id).join('・')}（手元のファイル）はまだ確かめていません。先に「手元のファイルを確かめる」で選ぶと、確認済みとして依頼文に載ります。` : '';
     return [pre + `各AIへ観測を依頼します（${sent}/${n} 依頼済み。手動のAIはコピーしただけで、送ったかは返事で確かめます）。手動のAIは、コピーした依頼文をそのAIに貼ってください。`, acts];
   }
@@ -692,7 +593,7 @@ function nextStep(c) {
     else acts.push([stale || revised ? '統合をやり直す' : '統合を依頼する', () => pickAndSend(c, 'synth'), true]);
     return [pre + (got < n ? `使える観測 ${got}/${n} 件。` : '全員の観測がそろいました。') + '統合をどのAIに頼むか選んで送ってください。', acts];
   }
-  if (!c.synthesis && S.canRetry(c, 'SYN')) { acts.push(isSending(S.currentRequest(c, 'SYN')) ? ['送付中…', () => { }] : ['同じ依頼を送り直す', () => retrySend(c, 'SYN'), true], ['依頼文を表示・コピー', () => showRequest(c, 'SYN')]); return [`${c.synthesisReq.to} への統合の依頼（${c.synthesisReq.task || StudioState.synTaskId(c)}）は送付に失敗しました。依頼文は保存済みです。原因（中継の停止など）を直してから、同じ依頼を送り直してください。`, acts]; }
+  if (!c.synthesis && canResend(c, 'SYN')) { acts.push(isSending(S.currentRequest(c, 'SYN')) ? ['送付中…', () => { }] : ['同じ依頼を送り直す', () => retrySend(c, 'SYN'), true], ['依頼文を表示・コピー', () => showRequest(c, 'SYN')]); return [`${c.synthesisReq.to} への統合の依頼（${c.synthesisReq.task || StudioState.synTaskId(c)}）は送付に失敗しました。依頼文は保存済みです。原因（中継の停止など）を直してから、同じ依頼を送り直してください。`, acts]; }
   if (!c.synthesis) { acts.push(['依頼文を表示・コピー', () => showRequest(c, 'SYN')]); if (agentTarget(c, 'SYN', c.synthesisReq.to)) acts.push(['AIへの指示を表示', () => showAgentGuide(c, 'SYN', c.synthesisReq.to)]); if (store.settings.proxyUrl) acts.push(['中継から統合を回収', () => collectAll(c)]); const synTask = c.synthesisReq.task || StudioState.synTaskId(c), run = StudioText.runnerLabel(runnerOf(c, synTask), { received: received(c, synTask) }); return [`${c.synthesisReq.to} の統合結果を待っています（${c.synthesisReq.task || StudioState.synTaskId(c)}）。${run ? run.text + '。' : ''}届いたら「結果を受け取る」に貼ってください。`, acts]; }
   if (!S.synthesisEligible(c)) return ['統合結果に確認が必要な項目があります。「統合」欄で確認してから判断してください。', acts];
   if (!c.gate || S.gateStale(c)) return ['統合結果が届きました。右の「人間の判断」で APPROVE / HOLD / REVISE を選んでください。', acts];
@@ -701,7 +602,7 @@ function nextStep(c) {
     if (S.canSendNext(c)) acts.push(['実行タスクを送る', () => pickAndSend(c, 'next'), true]);
     return [(c.next ? '前の実行タスクは古くなりました。' : '') + '承認されました。実行タスクを実装AIへ送ってください。', acts];
   }
-  if (!c.done && S.canRetry(c, 'NEXT')) { acts.push(isSending(S.currentRequest(c, 'NEXT')) ? ['送付中…', () => { }] : ['同じ依頼を送り直す', () => retrySend(c, 'NEXT'), true], ['依頼文を表示・コピー', () => showRequest(c, 'NEXT')]); return [`${c.next.to} への実行タスク（${c.next.task || StudioState.nextTaskId(c)}）は送付に失敗しました。依頼文は保存済みです。原因を直してから、同じ依頼を送り直してください。`, acts]; }
+  if (!c.done && canResend(c, 'NEXT')) { acts.push(isSending(S.currentRequest(c, 'NEXT')) ? ['送付中…', () => { }] : ['同じ依頼を送り直す', () => retrySend(c, 'NEXT'), true], ['依頼文を表示・コピー', () => showRequest(c, 'NEXT')]); return [`${c.next.to} への実行タスク（${c.next.task || StudioState.nextTaskId(c)}）は送付に失敗しました。依頼文は保存済みです。原因を直してから、同じ依頼を送り直してください。`, acts]; }
   if (!S.canCountDone(c)) {
     if (!c.done) acts.push(['依頼文を表示・コピー', () => showRequest(c, 'NEXT')]);
     if (!c.done && agentTarget(c, 'NEXT', c.next.to)) acts.push(['AIへの指示を表示', () => showAgentGuide(c, 'NEXT', c.next.to)]);
@@ -764,7 +665,7 @@ function renderObservers(c) {
     const recv = S.receivedCount(c, n), ok = S.eligibleRecord(c, 'RESULT', r, n);
     const st = r ? `<span class="chip ${ok ? 'ok' : 'wait'}">採用中：${esc(statusLabel(r))}</span><span class="chip ${ok ? 'ok' : 'ng'}">${ok ? '利用可能' : '利用不可（確認待ち）'}</span>`
       : t.sentAt ? `<span class="chip wait">${esc(S.deliveryLabel(c, S.currentRequest(c, 'OBS', n)) || '依頼済み')}・結果待ち</span>` : '<span class="chip">未依頼</span>';
-    const gen = S.obsGen(c, n), req = S.currentRequest(c, 'OBS', n), failed = S.canRetry(c, 'OBS', n);
+    const gen = S.obsGen(c, n), req = S.currentRequest(c, 'OBS', n), failed = canResend(c, 'OBS', n);
     const run = !r ? StudioText.runnerLabel(runnerOf(c, t.taskId), { received: received(c, t.taskId) }) : null;
     const ra = r && r.attemptId ? S.attempts(c).find(a => a.attemptId === r.attemptId) : null, carried = ra && ra.runner ? StudioText.runnerConditionText(ra.runner.condition) : '';
     const unvouched = ra ? StudioText.runnerCheckText(ra.runnerCheck) : '';
@@ -819,7 +720,7 @@ function renderDifference(c) {
 function staleBanner(c, what) { const r = StudioState.staleReason(c, what); return r ? `<div class="warn">古い：${esc(r)}（記録は残っています。この内容では先へ進めません）</div>` : ''; }
 function renderSynthesis(c) {
   if (!c.synthesis) {
-    const failed = !!c.synthesisReq && StudioState.canRetry(c, 'SYN');
+    const failed = !!c.synthesisReq && canResend(c, 'SYN');
     $('synthesis').innerHTML = `<div class="hint">${c.synthesisReq ? esc(c.synthesisReq.to) + (failed ? ' への統合の依頼は送付に失敗しました（' : ' に統合を依頼済み（') + esc(c.synthesisReq.task || StudioState.synTaskId(c)) + '）。' + (failed ? '依頼文は保存済みです。' : '結果を待っています。') : '使える観測がそろうと、統合を依頼できます。'}</div>`
       + (c.synthesisReq ? `<div class="row"><button class="btn ghost" data-req-syn>依頼文を表示</button>${failed ? (isSending(StudioState.currentRequest(c, 'SYN')) ? '<button class="btn" disabled>送付中…</button>' : '<button class="btn primary" data-retry-syn>同じ依頼を送り直す</button>') : ''}</div>` : '');
     const bs = $('synthesis').querySelector('[data-req-syn]'); if (bs) bs.onclick = () => showRequest(c, 'SYN');
@@ -843,14 +744,14 @@ function renderGate(c) {
     const r = S.recordGate(c, b.dataset.g, $('gateReason').value.trim(), now());      // guard inside the action (S-3)
     if (!r.ok) return tell(r.why);
     bump(c, 'gate'); if (c.gate.reason) bump(c, 'typed');
-    log(c, `人間の判断: ${c.gate.decision}${c.gate.reason ? '（' + oneLine(c.gate.reason) + '）' : ''}`); save(); render();
+    log(c, `人間の判断: ${c.gate.decision}${c.gate.reason ? '（' + oneLine(c.gate.reason) + '）' : ''}`); save(c); render();
   });
 }
 function renderNext(c) {
   const S = StudioState;
   if (!c.next) { $('next').innerHTML = `<div class="hint">${S.canSendNext(c) ? '実行タスクを送れます（上の「次にすること」）。' : '人間が APPROVE すると、実装AIへの実行タスクが作られます。'}</div>`; return; }
   const d = c.done;
-  $('next').innerHTML = `${staleBanner(c, 'NEXT')}<div class="hint">${esc(c.next.to)} への実行タスク（作成 ${hm(c.next.at)}・${esc(c.next.task || '')}）</div><details><summary class="hint">実行タスクの全文</summary><pre>${esc(c.next.packet)}</pre></details><div class="row"><button class="btn ghost" data-req-next>依頼文を表示・コピー</button>${S.canRetry(c, 'NEXT') ? '<span class="chip ng">送付に失敗</span>' + (isSending(S.currentRequest(c, 'NEXT')) ? '<button class="btn" disabled>送付中…</button>' : '<button class="btn primary" data-retry-next>同じ依頼を送り直す</button>') : ''}</div>
+  $('next').innerHTML = `${staleBanner(c, 'NEXT')}<div class="hint">${esc(c.next.to)} への実行タスク（作成 ${hm(c.next.at)}・${esc(c.next.task || '')}）</div><details><summary class="hint">実行タスクの全文</summary><pre>${esc(c.next.packet)}</pre></details><div class="row"><button class="btn ghost" data-req-next>依頼文を表示・コピー</button>${canResend(c, 'NEXT') ? '<span class="chip ng">送付に失敗</span>' + (isSending(S.currentRequest(c, 'NEXT')) ? '<button class="btn" disabled>送付中…</button>' : '<button class="btn primary" data-retry-next>同じ依頼を送り直す</button>') : ''}</div>
     ${d ? `${staleBanner(c, 'DONE')}${confirmControls(c, 'DONE', d)}<dl class="obs-body"><dt>完了報告（${esc(d.by || '')}・${esc(statusLabel(d))}${S.canCountDone(c) ? '' : '・完了に数えていません'}）</dt><dd>${esc(d.fields.CHANGED || '')}</dd><dt>確かめたこと</dt><dd>${esc(d.fields.VERIFIED || '—')}</dd><dt>不明</dt><dd>${esc(d.fields.UNKNOWN || '—')}</dd><dt>次に人間が決めること</dt><dd>${esc(d.fields.NEXT || '—')}</dd></dl>` : '<div class="hint">完了報告を待っています。</div>'}`;
   bindConfirm(c, $('next'));
   const bn = $('next').querySelector('[data-req-next]'); if (bn) bn.onclick = () => showRequest(c, 'NEXT');
@@ -877,8 +778,8 @@ function bind() {
     const names = [...$('obsPick').querySelectorAll('input:checked')].map(x => x.value); if (!names.length) return tell('AIを1つ以上選んでください');
     const premise = { title: $('premiseTitle').value, text: $('premiseInput').value };
     $('qInput').value = ''; $('premiseInput').value = ''; $('premiseTitle').value = ''; createCase(q, names, premise); };
-  $('newCaseBtn').onclick = () => { store.currentId = null; save(); render(); $('qInput').focus(); };
-  $('caseList').onclick = e => { const b = e.target.closest('[data-id]'); if (!b) return; store.currentId = b.dataset.id; save(); render(); schedulePoll(); };
+  $('newCaseBtn').onclick = () => { setCurrent(null); render(); $('qInput').focus(); };
+  $('caseList').onclick = e => { const b = e.target.closest('[data-id]'); if (!b) return; setCurrent(b.dataset.id); shownSig = ''; render(); schedulePoll(); };
   $('pasteBtn').onclick = () => doPaste($('pasteBox').value, '貼り付け');
   $('pasteBox').addEventListener('dragover', e => e.preventDefault());
   $('pasteBox').addEventListener('drop', async e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) doPaste(await f.text(), 'ファイル'); });
@@ -890,13 +791,13 @@ function bind() {
     for (const s of list) { if (known.has(s.ref.trim().toLowerCase())) { skipped.push(s.ref); continue; } known.add(s.ref.trim().toLowerCase());
       s.id = 'S' + (c.sources.length + 1); c.sources.push(s); log(c, `資料 ${s.id} を追加`); }
     if (skipped.length) tell('登録済みのため追加しませんでした：\n' + skipped.join('\n'));
-    bump(c, 'typed'); $('srcAdd').value = ''; save(); render(); verifySources(c); };
+    bump(c, 'typed'); $('srcAdd').value = ''; save(c); render(); verifySources(c); };
   $('srcTextBtn').onclick = async () => { const c = cur(), t = $('srcText').value; if (!t.trim()) return;
     const s = await makeTextSource('S' + (c.sources.length + 1), $('srcTextTitle').value, t);
     if (s.error) return tell(s.error);
     if (StudioText.isDuplicateText(c.sources, s)) return tell('同じ本文がすでに登録されています');
     c.sources.push(s); log(c, `資料 ${s.id}（本文「${s.ref}」）を追加`); bump(c, 'paste');
-    $('srcText').value = ''; $('srcTextTitle').value = ''; save(); render();
+    $('srcText').value = ''; $('srcTextTitle').value = ''; save(c); render();
     if (Object.values(c.tasks).some(t => t.sentAt)) tell('送付済みの依頼には入っていません。必要なら「作り直して再送」で新しい依頼文にしてください。'); };
   $('srcFile').onchange = async e => { const c = cur(), files = [...e.target.files]; e.target.value = ''; if (!files.length) return;
     for (const f of files) {
@@ -909,32 +810,29 @@ function bind() {
         else s.verifyNote = 'このブラウザでは計算できません（http://localhost で開いてください）';
       }
     }
-    bump(c, 'drop'); save(); render(); };
+    bump(c, 'drop'); save(c); render(); };
   $('exportBtn').onclick = () => { const c = cur(); download(c.id + '.json', StudioText.caseExportText(c, now()), 'application/json'); };
   $('mdBtn').onclick = () => { const c = cur(); download(c.id + '.md', caseMd(c), 'text/markdown'); };
   $('importFile').onchange = async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return;
     try { const o = JSON.parse(await f.text()); if (o.format !== 'ats-operational-case' || !o.case || !o.case.id) throw new Error('このStudioの記録JSONではありません');
-      let c = o.case; if (store.cases[c.id] && !await ask(c.id + ' は既にあります。読み込んだ内容で置き換えますか？')) return;
-      store.cases[c.id] = c; if (!store.order.includes(c.id)) store.order.unshift(c.id); store.currentId = c.id;
-      if (store.archived) store.archived = store.archived.filter(a => a.id !== c.id);   // 11/8: back from the archive (the file stays)
-      if (saveBlocked && await ask('保存が止まっています。読み込んだ内容で保存を再開しますか？（読めなかった保存データは上書きされます）')) { saveBlocked = false; $('saveWarn').hidden = true; }
-      log(c, '記録JSONから読み込み'); save(); render(); } catch (err) { tell('読み込めません: ' + err.message); } };
+      await putCase(o.case, '記録JSONから読み込み', Array.isArray(o.notSent) ? o.notSent : null);   // 0.6: notSent outside the Case comes back
+    } catch (err) { tell('読み込めません: ' + err.message); } };
   $('settingsBtn').onclick = () => { renderSettings(); $('settings').showModal(); };
-  $('restoreBtn').onclick = () => restoreFromCopy();
+  $('restoreBtn').hidden = true;      // 3-B: no record copies (D-3)
   $('archiveBtn').onclick = () => openArchive();
   $('defaultsBtn').onclick = async () => { if (!(await ask('中継の初期設定（中継のURL・各AIの渡し方）を読み込み、今の接続設定を置き換えます。記録（Case）は変わりません。', '読み込む'))) return;
     const d = await loadDefaults(store.settings.proxyUrl || DEFAULT_RELAY); if (!d.ok) return tell(d.why); renderSettings(); tell('初期設定を読み込みました。'); };
   // Save the relay URL as it is typed, so re-rendering the dialog (e.g. adding an AI) never drops it.
-  $('proxyUrl').oninput = () => { const v = $('proxyUrl').value.trim(); if (v !== store.settings.proxyUrl) { store.settings.exchangeDir = ''; store.settings.exchangeFor = ''; } store.settings.proxyUrl = v; save(); };
+  $('proxyUrl').oninput = () => { const v = $('proxyUrl').value.trim(); if (v !== store.settings.proxyUrl) { store.settings.exchangeDir = ''; store.settings.exchangeFor = ''; } store.settings.proxyUrl = v; writeRelaySettings(); $('proxyMsg').textContent = '中継の URL を変えました。ページを読み込み直すと、その中継の記録を開きます。'; };
   $('settings').addEventListener('close', () => { save(); render(); renderBackupNote(); schedulePoll(); });
-  $('proxyTest').onclick = async () => { try { const url = $('proxyUrl').value.trim(); const j = await proxyHealth(url); store.settings.exchangeDir = j.exchange || ''; store.settings.exchangeFor = url; save(); $('proxyMsg').textContent = `中継に届きました（使えるAPI: ${j.providers.join(', ') || 'なし'}／受け渡しフォルダ: ${j.exchange}）。AI との往復ができるかは、まだ確かめていません。`; } catch (e) { store.settings.exchangeDir = ''; store.settings.exchangeFor = ''; save(); $('proxyMsg').textContent = '接続できません: ' + e.message; } };
+  $('proxyTest').onclick = async () => { try { const url = $('proxyUrl').value.trim(); const j = await proxyHealth(url); store.settings.exchangeDir = j.exchange || ''; store.settings.exchangeFor = url; writeRelaySettings(); $('proxyMsg').textContent = `中継に届きました（使えるAPI: ${j.providers.join(', ') || 'なし'}／受け渡しフォルダ: ${j.exchange}）。AI との往復ができるかは、まだ確かめていません。`; } catch (e) { store.settings.exchangeDir = ''; store.settings.exchangeFor = ''; writeRelaySettings(); $('proxyMsg').textContent = '接続できません: ' + e.message; } };
   $('newObsBtn').onclick = () => { const v = $('newObs').value.trim(); if (!v || store.settings.observers.some(o => o.name === v)) return; store.settings.observers.push({ name: v, connector: 'manual', route: 'manual' }); $('newObs').value = ''; save(); renderSettings(); render(); };
 }
 async function doPaste(text, via) {
   const c = cur(); if (!text.trim()) return;
   const a = await receiveText(c, text, via);
   bump(c, via === 'ファイル' ? 'drop' : 'paste'); $('pasteBox').value = '';
-  $('pasteMsg').textContent = describeAttempt(a); save(); render();
+  $('pasteMsg').textContent = describeAttempt(a); save(c); render();
 }
 function download(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); }
 function caseMd(c) {
@@ -962,5 +860,5 @@ function caseMd(c) {
   return L.join('\n');
 }
 
-load(); bind(); render(); renderBackupNote(); renderStorageNote(); schedulePoll(); initialSetup();
-scheduleRecordCheck(); setInterval(scheduleRecordCheck, 60000);
+startRecord(); bind(); render(); schedulePoll();
+setInterval(() => { if (rec.ui.load === 'loaded') rec.refreshList(); }, 60000);   // section 4.7

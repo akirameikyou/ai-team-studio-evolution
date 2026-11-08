@@ -34,6 +34,8 @@
     //         mine: own edits kept after "最新を読み直す" of a conflict, until "控えを捨てる" (section 4.4) }
     const items = {};
     let order = [], relay = '', currentId = null;
+    // Which version of an item each object handed out belongs to: a re-read hands out a new object of a new generation.
+    const issued = new WeakMap(); let generation = 0;
     let resumeRun = null, resumeAgain = false, relayTimer = null, cacheTimer = null;
 
     const canWrite = () => ui.load === 'loaded' && ui.relay === 'online' && ui.cache === 'ok';
@@ -114,7 +116,9 @@
     // ---------- reading (section 4.3) ----------
     function put(id, kind, value, rev, sha256) {
       const it = items[id] || (items[id] = { kind, value: null, rev: 0, sha256: null, pending: null, dirty: false, flag: null, inflight: false, timer: null });
-      it.value = value; it.rev = rev; it.sha256 = sha256; return it;
+      it.value = value; it.rev = rev; it.sha256 = sha256;
+      if (value && typeof value === 'object') { it.gen = ++generation; issued.set(value, it.gen); }
+      return it;
     }
     async function loadAll() {
       ui.load = 'loading'; changed();
@@ -165,19 +169,27 @@
     async function flush(id) {
       const it = item(id); if (!it) return null;
       if (it.timer) { o.clearTimer(it.timer); it.timer = null; }
-      if (!canWrite() || it.flag || it.inflight) return stateOf(it);
+      if (it.inflight) { await it.sendP; return stateOf(it); }      // wait for the write in flight (Q-1 after a new Case, 11/8)
+      if (!canWrite() || it.flag) return stateOf(it);
       if (!it.pending) {
         if (!it.dirty) return stateOf(it);
         const p = { requestId: newRequestId(), baseRev: it.rev, body: bodyFor(id, it, it.rev), since: o.now(), tries: 0 };
-        it.pending = p; it.dirty = false; it.value = copy(p.body);
+        it.pending = p; it.dirty = false;              // it.value stays the page's own object (the page keeps editing it)
         if (!writeCache()) { it.pending = null; it.dirty = true; return stateOf(it); }   // D-9: not in the cache, not sent
       }
       return send(id);
     }
-    async function send(id) {
-      const it = item(id), p = it.pending;
-      if (!canWrite() || it.inflight) return stateOf(it);
-      it.inflight = true; p.tries++; changed();
+    // One write in flight per item; a second caller waits for the same one.
+    function send(id) {
+      const it = item(id);
+      if (it.inflight) return it.sendP;
+      if (!canWrite()) return Promise.resolve(stateOf(it));
+      it.inflight = true;
+      it.sendP = sendOnce(id, it).finally(() => { it.sendP = null; });
+      return it.sendP;
+    }
+    async function sendOnce(id, it) {
+      const p = it.pending; p.tries++; changed();
       const r = it.kind === 'settings'
         ? await call('POST', '/record/settings', { baseRev: p.baseRev, requestId: p.requestId, settings: p.body })
         : await call('POST', '/record/case', { id, baseRev: p.baseRev, requestId: p.requestId, case: p.body });
@@ -266,10 +278,16 @@
     }
 
     // ---------- what the page calls ----------
-    function edit(id, value) {        // value: the whole Case (or settings) as the page now holds it
+    function edit(id, value, replace) {   // value: the whole Case (or settings) as the page now holds it
       if (!canWrite()) return false;
       const it = item(id); if (!it || it.flag) return false;
+      // A Case object that is no longer this module's (it was re-read while the page worked on the old one, e.g. a
+      // delivery or a source check in flight) is never written over the newer version: it is kept as own edits (11/8).
+      if (!replace && it.kind === 'case' && value !== it.value && issued.has(value) && issued.get(value) !== it.gen) {
+        it.mine = copy(value); ui.why[id] = 'この Case は作業の途中で読み直されたため、古い内容では保存しません'; writeCache(); changed(); return false;
+      }
       it.value = value; it.dirty = true;
+      if (value && typeof value === 'object' && !issued.has(value)) issued.set(value, it.gen);
       if (!writeCache()) return false;
       if (it.timer) o.clearTimer(it.timer);
       it.timer = o.setTimer(() => { it.timer = null; flush(id); }, o.flushDelay);
@@ -281,7 +299,7 @@
       const st = items[SETTINGS];
       if (st && stateOf(st) !== 'clean') { await flush(SETTINGS); if (stateOf(items[SETTINGS]) !== 'clean') return { ok: false, why: '設定を中継に保存できていません' }; }
       const it = item(id); if (!it) return { ok: false, why: 'Case がありません' };
-      for (let i = 0; i < 3 && (it.dirty || it.pending); i++) { await flush(id); if (it.flag || !canWrite()) break; }
+      for (let i = 0; i < 5 && (it.dirty || it.pending || it.inflight); i++) { await flush(id); if (it.flag || !canWrite()) break; }
       return stateOf(it) === 'clean' ? { ok: true } : { ok: false, why: stateOf(it) === 'conflict' ? '別の画面がこの Case を更新しました' : whyNot() || stateOf(it) };
     }
     function whyNot() {
@@ -295,7 +313,7 @@
     }
     function replaceCase(c) {         // a JSON import over an existing Case: baseRev = its rev, the history keeps the old one
       const it = item(c.id); if (!canWrite() || !it || it.flag || it.pending) return false;
-      return edit(c.id, c);
+      return edit(c.id, c, true);
     }
     function noteNotSent(id, entry) {
       const list = ui.notSent[id] || (ui.notSent[id] = []);
