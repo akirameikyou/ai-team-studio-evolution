@@ -256,5 +256,56 @@
       : it.startsWith('DUPLICATE_KEY:') ? it.slice(14) + ' が2回あり値が違う（最初の値を使用）' : it;
   }
 
-  global.StudioText = { extractSources, splitDifferences, LAYERS, relaySafeName, relayPaths, agentInstruction, TEXT_KIND, TEXT_MAX, textSource, sourceBodies, isDuplicateText, fenceFor, caseIdFor, parseStoreSnapshot, NEAR_EMPTY_BYTES, storeCaseCount, copyChoices, snapshotRev, recordCheck, browserLabel, studioSettingsFrom, runnerLabel, runnerGuideNote, runnerConditionText, runnerCheckText, confirmationLabel };
+  // ---------- 11/8: the Case archive (the browser's storage is near its limit) ----------
+  // Chrome 157 keeps at most 5,242,880 UTF-16 characters per origin (10 MiB; measured 11/8 on a separate origin).
+  // A record with Japanese text is kept as UTF-16, so the record's length in characters is what counts.
+  const STORAGE_CHARS = 5242880, STORAGE_WARN = 0.8;
+  // text: the stored text, or its length in characters.
+  function storageUse(text, key) {
+    const used = (typeof text === 'number' ? text : String(text || '').length) + String(key || '').length;
+    const ratio = used / STORAGE_CHARS;
+    return { used, limit: STORAGE_CHARS, ratio, percent: Math.round(ratio * 1000) / 10, warn: ratio >= STORAGE_WARN };
+  }
+  // The same JSON as "記録をJSONで保存", so an archive file can also be read back with "JSONを読み込む".
+  function caseExportText(c, at) {
+    return JSON.stringify({ format: 'ats-operational-case', version: 1, exportedAt: at, case: c }, null, 2);
+  }
+  // A Case export read back (from the archive or a file). Returns { case } or { error }.
+  function parseCaseExport(text, expectedId) {
+    let o; try { o = JSON.parse(String(text)); } catch (e) { return { error: 'JSON として読めません' }; }
+    if (!o || o.format !== 'ats-operational-case' || !o.case || typeof o.case !== 'object' || !o.case.id) return { error: 'このStudioの記録JSONではありません' };
+    if (expectedId && o.case.id !== expectedId) return { error: `Case 番号が違います（${o.case.id}）` };
+    return { case: o.case };
+  }
+  // What is kept in the record for an archived Case: enough to list it and to find its file again.
+  function archiveEntry(c, saved, at) {
+    const q = String(c.question || '').split('\n')[0];
+    return { id: c.id, createdAt: c.createdAt || null, title: q.slice(0, 80), at, name: saved.name, sha256: saved.sha256, bytes: saved.bytes };
+  }
+  // The relay's reply to POST /archive ({ saved, sha256, bytes }) as the "saved" argument of archiveEntry.
+  function archiveSaved(reply) {
+    return { name: reply && reply.saved, sha256: reply && reply.sha256, bytes: reply && reply.bytes };
+  }
+  // IDs that are taken: Cases in the record and archived ones (so a new Case never reuses an archived Case's number).
+  function knownCaseIds(store) {
+    return [...Object.keys((store && store.cases) || {}), ...(((store && store.archived) || []).map(a => a.id))];
+  }
+  // The rows of the "書庫へ移す" list: oldest first, with each Case's size in characters and whether it can be moved.
+  // A Case being sent cannot be moved (its request is still in flight).
+  function archiveRows(store, busyIds) {
+    const busy = new Set(busyIds || []);
+    return (store.order || []).filter(id => store.cases[id]).map(id => {
+      const c = store.cases[id];
+      return { id, createdAt: c.createdAt || '', title: String(c.question || '').split('\n')[0].slice(0, 60), chars: JSON.stringify(c).length,
+        gate: c.gate && c.gate.decision || '', current: id === store.currentId, busy: busy.has(id) };
+    }).sort((a, b) => a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : 1);
+  }
+  // Where a Case brought back from the archive goes in the list: by creation time, newest first (as Cases are created).
+  function orderWith(order, cases, id) {
+    const rest = (order || []).filter(x => x !== id), t = (cases[id] && cases[id].createdAt) || '';
+    const i = rest.findIndex(x => ((cases[x] && cases[x].createdAt) || '') < t);
+    return i < 0 ? [...rest, id] : [...rest.slice(0, i), id, ...rest.slice(i)];
+  }
+
+  global.StudioText = { STORAGE_CHARS, storageUse, caseExportText, parseCaseExport, archiveEntry, archiveSaved, knownCaseIds, archiveRows, orderWith, extractSources, splitDifferences, LAYERS, relaySafeName, relayPaths, agentInstruction, TEXT_KIND, TEXT_MAX, textSource, sourceBodies, isDuplicateText, fenceFor, caseIdFor, parseStoreSnapshot, NEAR_EMPTY_BYTES, storeCaseCount, copyChoices, snapshotRev, recordCheck, browserLabel, studioSettingsFrom, runnerLabel, runnerGuideNote, runnerConditionText, runnerCheckText, confirmationLabel };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
