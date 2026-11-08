@@ -140,7 +140,11 @@ class ArchiveTests(unittest.TestCase):
             self.assertEqual(self.get('/archive', name=a)[0], 404)
         folder = str(self.adir())
         with mock.patch.object(Path, 'is_symlink', lambda p: str(p) == folder or real(p)):
-            self.assertEqual(self.get('/archives')[1]['archives'], [])
+            # 3-B 0.6 D-10 (2): a linked archive folder is an error the page can see, not an empty archive.
+            code, body = self.get('/archives')
+            self.assertEqual(code, 409)
+            self.assertNotIn('archives', body)
+            self.assertEqual(self.get('/archive', name=a)[0], 409)
             self.assertEqual(self.post({'id': CID, 'text': export_text()})['status'], 409)
         self.assertEqual(len(list(self.adir().iterdir())), 1)
 
@@ -152,6 +156,43 @@ class ArchiveTests(unittest.TestCase):
         self.assertEqual((a['count'], a['totalBytes']), (1, n))
         self.assertEqual(b['count'], 2)
         self.assertEqual(self.get('/archives')[1]['totalBytes'], a['bytes'] + b['bytes'])
+
+    # 3-B 0.6 D-10: two fixes to the archive (RECORD_UI_3B.md section 7.1).
+    def test_a10_same_millisecond_files_are_ordered_by_their_number(self):
+        self.adir().mkdir()
+        names = [f'{CID}--20261108T120000000Z{k}.json' for k in ('', '-2', '-9', '-10')] + [f'{CID}--20261108T115959999Z.json']
+        for n in names:
+            (self.adir() / n).write_text(export_text(), encoding='utf-8')
+        got = [x['name'] for x in self.get('/archives')[1]['archives']]
+        self.assertEqual(got, [names[3], names[2], names[1], names[0], names[4]])   # -10, -9, -2, (none = 1), older
+
+    def test_a11_the_listing_says_whether_the_archive_folder_exists(self):
+        code, body = self.get('/archives')
+        self.assertEqual((code, body['folder'], body['archives']), (200, 'absent', []))
+        self.post({'id': CID, 'text': export_text()})
+        code, body = self.get('/archives')
+        self.assertEqual((code, body['folder'], len(body['archives'])), (200, 'present', 1))
+
+    def test_a12_an_archive_folder_that_is_a_file_or_a_junction_is_refused(self):
+        self.adir().write_text('not a folder', encoding='utf-8')
+        self.assertEqual(self.get('/archives')[0], 409)
+        self.assertEqual(self.post({'id': CID, 'text': export_text()})['status'], 409)
+        self.adir().unlink()
+        try:
+            import _winapi
+        except ImportError:
+            self.skipTest('junctions need Windows')
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        (Path(outside.name) / f'{CID}--20261108T120000000Z.json').write_text(export_text(), encoding='utf-8')
+        _winapi.CreateJunction(outside.name, str(self.adir()))
+        self.addCleanup(lambda: self.adir().exists() and __import__('os').rmdir(self.adir()))
+        code, body = self.get('/archives')
+        self.assertEqual(code, 409)
+        self.assertNotIn(f'{CID}--20261108T120000000Z.json', json.dumps(body))
+        self.assertEqual(self.get('/archive', name=f'{CID}--20261108T120000000Z.json')[0], 409)
+        self.assertEqual(self.post({'id': CID, 'text': export_text()})['status'], 409)
+        self.assertEqual(len(list(Path(outside.name).iterdir())), 1)   # nothing was written outside
 
 
 if __name__ == '__main__':

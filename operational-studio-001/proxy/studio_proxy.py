@@ -80,15 +80,38 @@ def archive_dir():
     return EXCHANGE / '_archive'
 
 
-def archive_files():
-    """Regular archive files directly in the archive folder, newest name first (same link rules as the copies)."""
+def archive_folder_problem():
+    """3-B 0.6 D-10 (2): None if the archive folder is absent or a plain folder in its place, else the reason.
+    A link, a junction or a file there is an error the page must see (not an empty archive)."""
     d = archive_dir()
-    if not d.exists() or d.is_symlink():
+    if d.is_symlink():
+        return 'the archive folder is a symbolic link; it is not used'
+    if not d.exists():
+        return None
+    if not d.is_dir():
+        return 'the archive folder is not a folder'
+    if os.path.normcase(os.path.realpath(d)) != os.path.normcase(os.path.join(os.path.realpath(EXCHANGE), '_archive')):
+        return 'the archive folder points somewhere else (a link or a junction); it is not used'
+    return None
+
+
+def archive_order(p):
+    """3-B 0.6 D-10 (1): newest first means the time in the name, then the number after it (no number = 1)."""
+    m = ARCHIVE_NAME.match(p.name)
+    stamp = p.name.split('--')[1].split('Z')[0]
+    return (stamp, int(m.group(2)[1:]) if m.group(2) else 1, p.name)
+
+
+def archive_files():
+    """Regular archive files directly in the archive folder, newest first (same link rules as the copies).
+    Empty when the folder is absent or has a problem (callers check archive_folder_problem() first)."""
+    d = archive_dir()
+    if not d.exists() or archive_folder_problem():
         return []
     root = d.resolve()
     out = [p for p in d.glob('CASE-*.json')
            if ARCHIVE_NAME.match(p.name) and not p.is_symlink() and p.is_file() and p.resolve().parent == root]
-    return sorted(out, key=lambda p: (p.name.split('--')[1], p.name), reverse=True)
+    return sorted(out, key=archive_order, reverse=True)
 
 
 def archive_problem(cid, text):
@@ -397,9 +420,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(200, {'name': name, 'text': hit[0].read_bytes().decode('utf-8')})
             if u.path in ('/archives', '/archive') and not self.local_origin():
                 return self.reply(403, {'error': 'the archive is for local pages only'})
+            if u.path in ('/archives', '/archive') and archive_folder_problem():
+                return self.reply(409, {'error': archive_folder_problem()})
             if u.path == '/archives':
                 files = archive_files()
-                return self.reply(200, {'dir': str(archive_dir()), 'archives': [
+                return self.reply(200, {'dir': str(archive_dir()), 'folder': 'present' if archive_dir().exists() else 'absent', 'archives': [
                     {'id': ARCHIVE_NAME.match(p.name).group(1), 'name': p.name, 'bytes': p.stat().st_size} for p in files],
                     'total': len(files), 'totalBytes': sum(p.stat().st_size for p in files)})
             if u.path == '/archive':
@@ -503,8 +528,8 @@ class Handler(BaseHTTPRequestHandler):
             problem = archive_problem(cid, text)
             if problem:
                 return self.reply(400, {'error': problem})
-            if archive_dir().is_symlink():
-                return self.reply(409, {'error': 'the archive folder is a symbolic link; nothing is written there'})
+            if archive_folder_problem():
+                return self.reply(409, {'error': archive_folder_problem() + '; nothing is written there'})
             archive_dir().mkdir(parents=True, exist_ok=True)
             with _ARCHIVE_NAME_LOCK:
                 stamp = time.strftime('%Y%m%dT%H%M%S', time.gmtime()) + f'{int(time.time() * 1000) % 1000:03d}Z'
