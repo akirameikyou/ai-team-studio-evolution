@@ -134,8 +134,9 @@
       } else if (!st || st.rev !== srev || st.value == null) {
         const s = await call('GET', '/record/settings');
         if (unreachable(s)) { ui.load = 'loadFailed'; goOffline(s.body.error || 'HTTP ' + s.status); return; }
-        if (s.status === 409) put(SETTINGS, 'settings', st ? st.value : null, srev, null).flag = 'corrupt';
+        if (s.status === 409 && s.body.error === 'record_corrupt') put(SETTINGS, 'settings', st ? st.value : null, srev, null).flag = 'corrupt';
         else if (s.status === 200) put(SETTINGS, 'settings', s.body.settings || {}, s.body.rev || 0, s.body.sha256 || null);
+        else { ui.load = 'loadFailed'; ui.why.load = '設定を読めません（HTTP ' + s.status + '）'; changed(); return; }   // audit 2 (11/8)
       }
       order = L.cases.map(x => x.id);
       for (const row of L.cases) {
@@ -293,13 +294,18 @@
       it.timer = o.setTimer(() => { it.timer = null; flush(id); }, o.flushDelay);
       changed(); return true;
     }
-    // Q-1 (section 4.2): resolves true only when this Case's current content has a 200 from the relay.
-    async function saveNow(id) {
+    // Q-1 (section 4.2): resolves true only when this Case's current content has a 200 from the relay. With value
+    // (the object the page put the request text in), also only when that very object is this module's current one:
+    // an object handed out before a re-read was not written (section 16-2), so it is never ok (audit 1, 11/8).
+    async function saveNow(id, value) {
       if (!canWrite()) return { ok: false, why: whyNot() };
+      const stale = () => value !== undefined && item(id) && item(id).value !== value;
+      if (stale()) return { ok: false, why: 'この Case は作業の途中で読み直されたため、依頼文を保存できていません' };
       const st = items[SETTINGS];
       if (st && stateOf(st) !== 'clean') { await flush(SETTINGS); if (stateOf(items[SETTINGS]) !== 'clean') return { ok: false, why: '設定を中継に保存できていません' }; }
       const it = item(id); if (!it) return { ok: false, why: 'Case がありません' };
       for (let i = 0; i < 5 && (it.dirty || it.pending || it.inflight); i++) { await flush(id); if (it.flag || !canWrite()) break; }
+      if (stale()) return { ok: false, why: 'この Case は保存の途中で読み直されたため、依頼文を保存できていません' };
       return stateOf(it) === 'clean' ? { ok: true } : { ok: false, why: stateOf(it) === 'conflict' ? '別の画面がこの Case を更新しました' : whyNot() || stateOf(it) };
     }
     function whyNot() {

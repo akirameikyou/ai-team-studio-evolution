@@ -2,7 +2,7 @@
 <html lang="ja"><head><meta charset="utf-8"><title>stage 3-B record tests</title></head>
 <body>
 <h1>段階3-B 記録の口の結び目の試験（studio_record.js）</h1>
-<p>RECORD_UI_3B.md 0.6 §10 の U-試験のうち、画面を使わずに確かめられる部分。中継は 3-A（RECORD_API_3A.md 0.6.2 §3.1）と同じ規則で動く試験用の偽物（このページの中）。時計も偽物で、時間は試験が進める。外部通信なし。</p>
+<p>RECORD_UI_3B.md 0.6 §10 の U-試験のうち、画面を使わずに確かめられる部分。中継は 3-A（RECORD_API_3A.md 0.6.2 §3.1）の版・requestId・送り直しの規則で動く試験用の偽物（このページの中）。時計も偽物で、時間は試験が進める。外部通信なし。<br><b>範囲</b>：状態の移り変わりの試験。偽の中継の <code>sha256</code> は本物の SHA-256 ではなく（短いハッシュ）、3-A の入力の確かめ（形・大きさ・createdAt・リンク）も再現していない。それらは Python の試験（test_record_api）と本物の中継での結合試験で確かめる。</p>
 <pre id="out">running…</pre>
 <script>document.write('<script src="studio_record.js?t=' + Date.now() + '"><\/script>');   // never a cached copy (mutation runs)</script>
 <script>
@@ -296,6 +296,25 @@ test('Stale object: an edit of a Case object that was re-read meanwhile is not w
   eq(e.mine(id).question, 'late result of the old job', 'kept as own edits'); eq(e.state(id), 'clean', 'still clean');
   ok(e.replaceCase(C(id, { question: 'imported' })), 'a JSON import replaces on purpose');
   await clock.run(1000); await settle(); eq(relay.cases[id].value.question, 'imported', 'import written');
+});
+test('Audit 1: Q-1 with an object handed out before a re-read is never ok', async () => {
+  const id = 'CASE-20261108-001-aaaaa1';
+  const { relay, e } = await setup(r => r.write(id, 0, 'x', C(id)));
+  const old = e.value(id);                                   // a delivery is being prepared on this object
+  relay.other(id, v => v.question = 'other'); await e.refreshList();
+  old.requests = [{ task: 'T-1', packet: 'p', deliveries: [] }];
+  ok(!e.edit(id, old), 'the old object is not written');
+  const r = await e.saveNow(id, old);
+  eq(r.ok, false, 'saveNow of the old object is not ok (the request text is not on the relay)');
+  ok(!(relay.cases[id].value.requests), 'relay has no request text');
+  const cur = e.value(id); cur.requests = [{ task: 'T-2', packet: 'p', deliveries: [] }]; e.edit(id, cur);
+  eq((await e.saveNow(id, cur)).ok, true, 'saveNow of the current object is ok after its 200');
+  eq(relay.cases[id].value.requests[0].task, 'T-2', 'that request text is on the relay');
+});
+test('Audit 2: settings answered with something other than 200 or 409 stop the loading', async () => {
+  const { e } = await setup(r => { r.failNext = { match: (m, p) => p.startsWith('/record/settings'), status: 404, body: { error: 'unexpected' } }; });
+  eq(e.ui.load, 'loadFailed', 'loadFailed'); ok(!e.canWrite(), 'cannot write');
+  ok(!e.addCase(C('CASE-20261108-009-zzzzz9')), 'no new Case');
 });
 test('U-12 the cache key is its own; the old record key is never touched', async () => {
   const { storage, e } = await setup(); e.addCase(C('CASE-20261108-001-aaaaa1')); await settle();

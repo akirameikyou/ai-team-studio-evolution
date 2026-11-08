@@ -166,7 +166,9 @@ async function restoreArchived(id, name) {
   try { const r = await fetch(relayBase() + '/archive?' + new URLSearchParams({ name })); b = await r.json(); if (!r.ok) throw new Error(b.error || 'HTTP ' + r.status); }
   catch (e) { return tell('書庫を読めません（' + e.message + '）'); }
   const h = typeof b.text === 'string' ? await sha256Hex(new TextEncoder().encode(b.text)) : null;
-  if (typeof b.text !== 'string' || (h && b.sha256 !== h)) return tell('書庫のファイルの中身と SHA-256 が一致しません。戻しません。');
+  if (typeof b.text !== 'string') return tell('書庫のファイルを読めません。戻しません。');
+  if (!h) return tell('このブラウザでは SHA-256 を計算できないため、書庫のファイルを確かめられません。戻しません（http://localhost か 127.0.0.1 で開いてください）。');   // audit 3 (11/8)
+  if (b.sha256 !== h) return tell('書庫のファイルの中身と SHA-256 が一致しません。戻しません。');
   const p = StudioText.parseCaseExport(b.text, id);
   if (p.error) return tell('戻せません：' + p.error);
   return putCase(p.case, '書庫から戻す');
@@ -420,8 +422,9 @@ async function deliverOnce(c, req, retry) {
   // Q-1 (3-B section 4.2): nothing leaves the Studio unless the Case holding its request text has a 200 from the relay.
   // If not, nothing is written into the Case (it is read only then, D-12): the reason goes to notSent and the banner,
   // and the same request is sent again only when a person presses "同じ依頼を送り直す".
-  save(c);
-  const kept = await rec.saveNow(c.id);
+  // The request text is in c. If c could not be taken as an edit (read only, or c was re-read meanwhile), it is not
+  // stored, so it is not sent; saveNow is asked about this very object (audit 1, 11/8).
+  const kept = save(c) ? await rec.saveNow(c.id, c) : { ok: false, why: rec.whyNot() || rec.ui.why[c.id] || '依頼文を保存できません' };
   if (!kept.ok) {
     rec.noteNotSent(c.id, { task: req.task, at: now(), why: kept.why || '保存できません' });
     tell(`${name} への${what}の依頼 ${req.task} を送りませんでした（${kept.why}）。保存してから送る決まりです。依頼文は画面と控えに残っています。保存できる状態に戻ったら「同じ依頼を送り直す」で送れます（自動では送りません）。`);
