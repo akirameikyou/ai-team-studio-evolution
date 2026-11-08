@@ -16,7 +16,8 @@
     <div class="side-bottom">
       <button id="settingsBtn" class="btn ghost wide">AIの接続設定</button>
       <button id="restoreBtn" class="btn ghost wide">記録の写しから戻す</button>
-      <div class="side-note">保存先：このブラウザ<br>この記録：<span id="recordNote">—</span><br>記録の写し：<span id="backupNote">なし（中継なし）</span><br>外部への送信：<span id="netNote">なし</span></div>
+      <button id="archiveBtn" class="btn ghost wide">書庫（古い Case を移す・戻す）</button>
+      <div class="side-note">保存先：このブラウザ<br>この記録：<span id="recordNote">—</span><br>記録の写し：<span id="backupNote">なし（中継なし）</span><br>保存領域：<span id="storageNote">—</span><br>外部への送信：<span id="netNote">なし</span></div>
     </div>
   </aside>
 
@@ -134,8 +135,8 @@
 <script src="connectors.js?v=3-2"></script>
 <script src="parse_v2.js"></script>
 <script src="studio_state.js?v=3-2-r2"></script>
-<script src="studio_text.js?v=3-2-r1"></script>
+<script src="studio_text.js?v=archive-2"></script>
 <script src="studio_packets.js?v=2-4"></script>
-<script src="app.js?v=3-2-r1"></script>
+<script src="app.js?v=archive-4"></script>
 </body>
 </html>

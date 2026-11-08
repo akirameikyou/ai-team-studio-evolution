@@ -61,6 +61,47 @@ def snapshot_entry(p):
     return entry
 
 
+# 11/8: the Case archive in <exchange>/_archive. The browser's storage holds about 10 MiB (5,242,880 UTF-16 characters
+# in Chrome 157, measured) and the record had reached 90% of it, so old Cases are moved out one file per Case, in the
+# Studio's own export form. One file per archive; nothing is overwritten or deleted.
+MAX_ARCHIVE = 8 * 1024 * 1024
+CASE_ID = re.compile(r'^CASE-\d{8}-\d{3}(-[a-z0-9]{6})?$')
+ARCHIVE_NAME = re.compile(r'^(CASE-\d{8}-\d{3}(?:-[a-z0-9]{6})?)--\d{8}T\d{9}Z(-\d+)?\.json$')
+_ARCHIVE_NAME_LOCK = threading.Lock()
+
+
+def archive_dir():
+    return EXCHANGE / '_archive'
+
+
+def archive_files():
+    """Regular archive files directly in the archive folder, newest name first (same link rules as the copies)."""
+    d = archive_dir()
+    if not d.exists() or d.is_symlink():
+        return []
+    root = d.resolve()
+    out = [p for p in d.glob('CASE-*.json')
+           if ARCHIVE_NAME.match(p.name) and not p.is_symlink() and p.is_file() and p.resolve().parent == root]
+    return sorted(out, key=lambda p: (p.name.split('--')[1], p.name), reverse=True)
+
+
+def archive_problem(cid, text):
+    """None if text is one Studio Case in the export form for Case cid, else the reason."""
+    if not isinstance(cid, str) or not CASE_ID.match(cid):
+        return 'id must be a Case ID'
+    if not isinstance(text, str):
+        return 'text must be the Case export as JSON text'
+    try:
+        o = json.loads(text)
+    except ValueError:
+        return 'text is not JSON'
+    if not isinstance(o, dict) or o.get('format') != 'ats-operational-case' or o.get('version') != 1:
+        return 'text is not a Studio Case export (ats-operational-case, version 1)'
+    if not isinstance(o.get('case'), dict) or o['case'].get('id') != cid:
+        return 'case.id does not match id'
+    return None
+
+
 def snapshot_problem(text):
     """None if text is a Studio record (the shape app.js load() accepts), else the reason."""
     if not isinstance(text, str):
@@ -270,6 +311,20 @@ class Handler(BaseHTTPRequestHandler):
                 if not hit:
                     return self.reply(404, {'error': 'no such snapshot'})
                 return self.reply(200, {'name': name, 'text': hit[0].read_bytes().decode('utf-8')})
+            if u.path in ('/archives', '/archive') and not self.local_origin():
+                return self.reply(403, {'error': 'the archive is for local pages only'})
+            if u.path == '/archives':
+                files = archive_files()
+                return self.reply(200, {'dir': str(archive_dir()), 'archives': [
+                    {'id': ARCHIVE_NAME.match(p.name).group(1), 'name': p.name, 'bytes': p.stat().st_size} for p in files],
+                    'total': len(files), 'totalBytes': sum(p.stat().st_size for p in files)})
+            if u.path == '/archive':
+                name = q.get('name', '')
+                hit = [p for p in archive_files() if p.name == name] if ARCHIVE_NAME.match(name) else []
+                if not hit:
+                    return self.reply(404, {'error': 'no such archive'})
+                data = hit[0].read_bytes()
+                return self.reply(200, {'name': name, 'text': data.decode('utf-8'), 'sha256': hashlib.sha256(data).hexdigest()})
             if u.path == '/case-exists':
                 # 2-B: lets the Studio avoid a Case ID whose folder is already here (read-only; nothing is created).
                 return self.reply(200, {'exists': (EXCHANGE / safe(q['case'])).exists()})
@@ -316,6 +371,8 @@ class Handler(BaseHTTPRequestHandler):
         path = urllib.parse.urlparse(self.path).path
         if path == '/snapshot':
             return self.post_snapshot()
+        if path == '/archive':
+            return self.post_archive()
         if path != '/task':
             return self.reply(404, {'error': 'unknown path'})
         try:
@@ -341,6 +398,41 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(200, {'text': text, 'note': route})
         except urllib.error.HTTPError as e:
             return self.reply(502, {'error': f'API HTTP {e.code}'})
+        except Exception as e:
+            return self.reply(500, {'error': str(e)})
+
+    def post_archive(self):
+        """11/8: keep one Case as a new file in the archive, exactly as sent. The Studio removes the Case from the
+        browser only after reading this file back and finding it equal (app.js archiveCases)."""
+        if not self.local_origin():
+            return self.reply(403, {'error': 'the archive is for local pages only'})
+        try:
+            n = int(self.headers.get('Content-Length', '0'))
+            if n > MAX_ARCHIVE:
+                return self.reply(413, {'error': f'too large ({n} bytes, limit {MAX_ARCHIVE})'})
+            j = json.loads(self.rfile.read(n).decode('utf-8'))
+            if not isinstance(j, dict):
+                return self.reply(400, {'error': 'body must be an object'})
+            cid, text = j.get('id'), j.get('text')
+            problem = archive_problem(cid, text)
+            if problem:
+                return self.reply(400, {'error': problem})
+            if archive_dir().is_symlink():
+                return self.reply(409, {'error': 'the archive folder is a symbolic link; nothing is written there'})
+            archive_dir().mkdir(parents=True, exist_ok=True)
+            with _ARCHIVE_NAME_LOCK:
+                stamp = time.strftime('%Y%m%dT%H%M%S', time.gmtime()) + f'{int(time.time() * 1000) % 1000:03d}Z'
+                name, k = f'{cid}--{stamp}.json', 1
+                while (archive_dir() / name).exists():
+                    k += 1
+                    name = f'{cid}--{stamp}-{k}.json'
+                write_atomic(archive_dir() / name, text)
+            data = text.encode('utf-8')
+            files = archive_files()
+            return self.reply(200, {'saved': name, 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest(),
+                                    'count': len(files), 'totalBytes': sum(p.stat().st_size for p in files)})
+        except (ValueError, TypeError) as e:
+            return self.reply(400, {'error': f'bad request: {e}'})
         except Exception as e:
             return self.reply(500, {'error': str(e)})
 

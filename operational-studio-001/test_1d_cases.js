@@ -365,6 +365,64 @@ test('SN-06 どのブラウザの記録か（利用者の環境の表示）', ()
   check(T.browserLabel('') === 'ブラウザ', '分からなければ「ブラウザ」');
 });
 
+// ---------- 11/8: the Case archive ----------
+const arStore = () => ({ version: 1, currentId: 'CASE-20261025-001-bbbbbb',
+  cases: { 'CASE-20261021-001-aaaaaa': { id: 'CASE-20261021-001-aaaaaa', question: '古い問い\n二行目', createdAt: '2026-10-21T00:00:00.000Z', gate: { decision: 'APPROVE' } },
+           'CASE-20261025-001-bbbbbb': { id: 'CASE-20261025-001-bbbbbb', question: '新しい問い', createdAt: '2026-10-25T00:00:00.000Z' },
+           'CASE-20261023-001-cccccc': { id: 'CASE-20261023-001-cccccc', question: '中の問い', createdAt: '2026-10-23T00:00:00.000Z' } },
+  order: ['CASE-20261025-001-bbbbbb', 'CASE-20261023-001-cccccc', 'CASE-20261021-001-aaaaaa'],
+  archived: [{ id: 'CASE-20261020-001-zzzzzz' }] });
+
+test('AR-01 保存領域の使用率（Chrome 157 の上限 5,242,880 字）', () => {
+  check(T.STORAGE_CHARS === 5242880, '上限は 10 MiB を UTF-16 で数えた字数');
+  const u = T.storageUse('x'.repeat(4713380), 'ats-operational-001');
+  check(u.percent === 89.9 && u.warn, '11/4 の記録 r536（4,713,380 字）は 89.9%・警告あり');
+  check(!T.storageUse('x'.repeat(4000000)).warn && T.storageUse('x'.repeat(4194304)).warn, '80% から警告');
+  check(T.storageUse(null).used === 0, '記録がなければ 0');
+});
+
+test('AR-02 書き出しの形と読み戻し（JSONを読み込む と同じ形）', () => {
+  const c = arStore().cases['CASE-20261021-001-aaaaaa'];
+  const text = T.caseExportText(c, '2026-11-08T00:00:00.000Z');
+  const o = JSON.parse(text);
+  check(o.format === 'ats-operational-case' && o.version === 1 && o.exportedAt === '2026-11-08T00:00:00.000Z' && o.case.id === c.id, '書き出しの形');
+  const back = T.parseCaseExport(text, c.id);
+  check(JSON.stringify(back.case) === JSON.stringify(c), '読み戻すと元の Case と同じ');
+  check(T.parseCaseExport(text, 'CASE-20261025-001-bbbbbb').error.includes('違います'), '別の Case 番号なら断る');
+  check(!!T.parseCaseExport('{"format":"x"}').error && !!T.parseCaseExport('not json').error, '形が違えば断る');
+});
+
+test('AR-03 書庫の見出しと、使えない Case 番号', () => {
+  const c = arStore().cases['CASE-20261021-001-aaaaaa'];
+  const e = T.archiveEntry(c, { name: 'n.json', sha256: 'ab', bytes: 10 }, 'T');
+  check(e.id === c.id && e.title === '古い問い' && e.createdAt === c.createdAt && e.name === 'n.json' && e.sha256 === 'ab' && e.bytes === 10 && e.at === 'T', '一覧に要るものと、ファイルを見つける名前');
+  // 11/8 found in the trial run: the relay's reply names the file "saved", not "name"; the heading lost the file name.
+  const reply = { saved: 'CASE-20261021-001-aaaaaa--20261108T082329333Z.json', bytes: 12, sha256: 'cd', count: 1, totalBytes: 12 };
+  const e2 = T.archiveEntry(c, T.archiveSaved(reply), 'T');
+  check(e2.name === reply.saved && e2.sha256 === 'cd' && e2.bytes === 12, '中継の答え（saved）から、見出しにファイル名が入る');
+  const ids = T.knownCaseIds(arStore());
+  check(ids.length === 4 && ids.includes('CASE-20261020-001-zzzzzz'), '書庫の Case 番号も使用中に数える');
+  check(T.caseIdFor(new Date(2026, 9, 20), ids, 'abcdef') === 'CASE-20261020-002-abcdef', '書庫に移した Case と同じ連番を作らない');
+  check(T.knownCaseIds({ cases: {} }).length === 0, '書庫がない記録（これまでの記録）でも動く');
+});
+
+test('AR-04 書庫へ移す一覧（古い順・送付中は移せない）', () => {
+  const rows = T.archiveRows(arStore(), ['CASE-20261023-001-cccccc']);
+  check(rows.map(r => r.id.slice(5, 13)).join(',') === '20261021,20261023,20261025', '作成の古い順');
+  check(rows[0].gate === 'APPROVE' && rows[0].title === '古い問い' && rows[0].chars > 0, '判断・問いの1行目・大きさ');
+  check(rows[1].busy && !rows[0].busy, '送付中の Case は印が付く');
+  check(rows[2].current && !rows[0].current, '開いている Case に印');
+});
+
+test('AR-05 書庫から戻した Case の一覧の位置（作成の新しい順）', () => {
+  const s = arStore();
+  s.cases['CASE-20261022-001-dddddd'] = { id: 'CASE-20261022-001-dddddd', createdAt: '2026-10-22T00:00:00.000Z' };
+  check(T.orderWith(s.order, s.cases, 'CASE-20261022-001-dddddd').join(',') === 'CASE-20261025-001-bbbbbb,CASE-20261023-001-cccccc,CASE-20261022-001-dddddd,CASE-20261021-001-aaaaaa', '作成時刻の位置に入る');
+  s.cases['CASE-20261101-001-eeeeee'] = { id: 'CASE-20261101-001-eeeeee', createdAt: '2026-11-01T00:00:00.000Z' };
+  check(T.orderWith(s.order, s.cases, 'CASE-20261101-001-eeeeee')[0] === 'CASE-20261101-001-eeeeee', '一番新しければ先頭');
+  check(T.orderWith(s.order, s.cases, 'CASE-20261025-001-bbbbbb').filter(x => x === 'CASE-20261025-001-bbbbbb').length === 1, '既に一覧にあっても二重にしない');
+});
+
 return results;
 }
 if (typeof module !== 'undefined') module.exports = { run1d };
