@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><title>stage 3-B record tests</title></head>
+<body>
+<h1>段階3-B 記録の口の結び目の試験（studio_record.js）</h1>
+<p>RECORD_UI_3B.md 0.6 §10 の U-試験のうち、画面を使わずに確かめられる部分。中継は 3-A（RECORD_API_3A.md 0.6.2 §3.1）と同じ規則で動く試験用の偽物（このページの中）。時計も偽物で、時間は試験が進める。外部通信なし。</p>
+<pre id="out">running…</pre>
+<script>document.write('<script src="studio_record.js?t=' + Date.now() + '"><\/script>');   // never a cached copy (mutation runs)</script>
+<script>
+'use strict';
+// ---------- a fake relay with the rules of 3-A section 3.1 ----------
+function hash(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return ('0000000' + (h >>> 0).toString(16)).slice(-8); }
+function Relay() {
+  const r = { cases: {}, settings: { rev: 0, value: {}, reqs: {} }, down: false, holds: [], log: [], corrupt: new Set(), settingsCorrupt: false, archives: null, failNext: null };
+  r.entry = id => id === '_settings' ? r.settings : r.cases[id];
+  r.write = (id, baseRev, requestId, value) => {
+    let e = r.entry(id);
+    if (!e) { if (id === '_settings') e = r.settings; else e = r.cases[id] = { rev: 0, value: null, reqs: {}, createdAt: value && value.createdAt }; }
+    const sha = hash(JSON.stringify(value));
+    if (e.reqs[requestId]) { const s = e.reqs[requestId]; return s.sha === sha ? [200, { rev: s.rev, sha256: sha, replayed: true, currentRev: e.rev }] : [409, { error: 'request_id_reused' }]; }
+    if (baseRev !== e.rev) { if (!e.rev && id !== '_settings') delete r.cases[id]; return [409, { error: 'version_conflict', currentRev: e.rev }]; }
+    e.rev++; e.value = JSON.parse(JSON.stringify(value)); e.sha = sha; e.reqs[requestId] = { rev: e.rev, sha };
+    return [200, { rev: e.rev, sha256: sha, replayed: false }];
+  };
+  r.other = (id, mutate) => { const e = r.entry(id); const v = JSON.parse(JSON.stringify(e.value)); mutate(v); return r.write(id, e.rev, 'other-' + Math.random(), v); };
+  r.handle = (method, path, body) => {
+    const u = new URL('http://x' + path);
+    if (method === 'GET' && u.pathname === '/record') return [200, { format: 'ats-record-list-1', cases: Object.entries(r.cases).filter(([, e]) => e.rev).map(([id, e]) => ({ id, rev: e.rev, sha256: e.sha, createdAt: e.createdAt, ...(r.corrupt.has(id) ? { problem: 'bad' } : {}) })), settings: { rev: r.settings.rev, ...(r.settingsCorrupt ? { problem: 'bad' } : {}) } }];
+    if (method === 'GET' && u.pathname === '/record/case') { const id = u.searchParams.get('id'), e = r.cases[id]; if (r.corrupt.has(id)) return [409, { error: 'record_corrupt' }]; return e && e.rev ? [200, { id, rev: e.rev, sha256: e.sha, case: e.value }] : [404, { error: 'no such Case' }]; }
+    if (method === 'GET' && u.pathname === '/record/settings') return r.settingsCorrupt ? [409, { error: 'record_corrupt' }] : [200, { rev: r.settings.rev, sha256: r.settings.sha || null, settings: r.settings.value }];
+    if (method === 'POST' && u.pathname === '/record/case') { if (r.corrupt.has(body.id)) return [409, { error: 'record_corrupt' }]; return r.write(body.id, body.baseRev, body.requestId, body.case); }
+    if (method === 'POST' && u.pathname === '/record/settings') { if (r.settingsCorrupt) return [409, { error: 'record_corrupt' }]; return r.write('_settings', body.baseRev, body.requestId, body.settings); }
+    if (method === 'GET' && u.pathname === '/archives') return r.archives || [200, { folder: 'absent', archives: [] }];
+    return [404, { error: 'unknown' }];
+  };
+  r.fetch = async (url, init) => {
+    const method = (init && init.method) || 'GET', path = url.replace(/^http:\/\/relay/, ''), body = init && init.body ? JSON.parse(init.body) : null;
+    r.log.push({ method, path, body });
+    if (r.holds.length && r.holds[0].match(method, path)) { const h = r.holds.shift(); await h.wait; }
+    if (r.down) throw new Error('relay down');
+    if (r.failNext && r.failNext.match(method, path)) { const f = r.failNext; r.failNext = null;
+      if (f.applyThenDrop) { r.handle(method, path, body); throw new Error('answer lost'); }
+      return { status: f.status, json: async () => f.body || {} }; }
+    const [status, j] = r.handle(method, path, body);
+    return { status, json: async () => j };
+  };
+  r.hold = (method, path) => { let release; const wait = new Promise(res => release = res); r.holds.push({ match: (m, p) => m === method && p.startsWith(path), wait }); return release; };
+  r.posts = p => r.log.filter(x => x.method === 'POST' && (!p || x.path === p));
+  return r;
+}
+function Storage() { const m = new Map(); const s = { broken: false, setItem(k, v) { if (s.broken) { const e = new Error('full'); e.name = 'QuotaExceededError'; throw e; } m.set(k, String(v)); }, getItem: k => m.has(k) ? m.get(k) : null, keys: () => [...m.keys()] }; return s; }
+function Clock() { let t = 0, n = 0; const q = new Map(); return { set: (f, ms) => { const id = ++n; q.set(id, { at: t + ms, f }); return id; }, clear: id => q.delete(id),
+  async run(ms) { t += ms; for (const [id, x] of [...q.entries()].sort((a, b) => a[1].at - b[1].at)) if (x.at <= t && q.has(id)) { q.delete(id); await x.f(); await settle(); } } }; }
+const settle = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); await new Promise(r => setTimeout(r, 0)); };
+let seq = 0;
+function engine(relay, storage, clock, extra) {
+  return StudioRecord.create(Object.assign({ fetch: relay.fetch, storage, setTimer: clock.set, clearTimer: clock.clear, now: () => '2026-11-08T00:00:00.000Z',
+    random: b => { for (let i = 0; i < b.length; i++) b[i] = (seq * 31 + i * 7 + 1) & 255; seq++; },
+    computeCarry: v => ({ stage: 'CASE', waiting: [], next: '' }) }, extra));
+}
+const C = (id, extra) => ({ id, question: 'Q ' + id, createdAt: '2026-11-08T0' + (id.slice(-1)) + ':00:00.000Z', log: [], ...extra });
+async function setup(prepare) {
+  const relay = Relay(), storage = Storage(), clock = Clock();
+  if (prepare) prepare(relay);
+  const e = engine(relay, storage, clock); await e.start('http://relay'); await settle();
+  return { relay, storage, clock, e };
+}
+// ---------- the tests ----------
+const results = []; let cur = null;
+function ok(cond, what) { results.push({ test: cur, ok: !!cond, what }); }
+const eq = (a, b, what) => ok(JSON.stringify(a) === JSON.stringify(b), what + ' — got ' + JSON.stringify(a) + ', want ' + JSON.stringify(b));
+const T = [];
+const test = (name, f) => T.push([name, f]);
+
+test('U-01 new Case is written with baseRev 0 and reads back the same', async () => {
+  const { relay, e, clock } = await setup();
+  eq(e.ui.load, 'loaded', 'loaded'); ok(e.addCase(C('CASE-20261108-001-aaaaa1')), 'addCase');
+  await settle();
+  eq(relay.posts('/record/case')[0].body.baseRev, 0, 'baseRev 0'); eq(relay.cases['CASE-20261108-001-aaaaa1'].rev, 1, 'rev 1');
+  eq(e.state('CASE-20261108-001-aaaaa1'), 'clean', 'clean');
+});
+test('U-02 edits within 1 s are one write; rev +1', async () => {
+  const id = 'CASE-20261108-001-aaaaa1';
+  const { relay, e, clock } = await setup(r => r.write(id, 0, 'x', C(id)));
+  const v = JSON.parse(JSON.stringify(e.value(id)));
+  v.question = 'a'; e.edit(id, v); await clock.run(500); v.question = 'ab'; e.edit(id, JSON.parse(JSON.stringify(v))); await clock.run(999);
+  eq(relay.posts().length, 0, 'not yet'); await clock.run(1); await settle();
+  eq(relay.posts().length, 1, 'one write'); eq(relay.cases[id].rev, 2, 'rev 2'); eq(relay.cases[id].value.question, 'ab', 'content');
+});
+test('U-03 an edit while sending becomes the next write; never two at once', async () => {
+  const id = 'CASE-20261108-001-aaaaa1';
+  const { relay, e, clock } = await setup(r => r.write(id, 0, 'x', C(id)));
+  const release = relay.hold('POST', '/record/case');
+  e.edit(id, { ...e.value(id), question: 'one' }); await clock.run(1000); await settle();
+  eq(e.state(id), 'sending', 'sending'); ok(e.edit(id, { ...e.value(id), question: 'two' }), 'edit while sending');
+  await clock.run(1000); await settle(); eq(relay.posts().length, 1, 'still one in flight');
+  release(); await settle(); await settle();
+  eq(relay.posts().length, 2, 'second write after'); eq(relay.posts()[1].body.baseRev, 2, 'on rev 2'); eq(relay.cases[id].value.question, 'two', 'final'); eq(e.state(id), 'clean', 'clean');
+});
+test('U-05/U-21 lost answer: offline, no edits, same requestId resent, then drafts after it', async () => {
+  const id = 'CASE-20261108-001-aaaaa1';
+  const { relay, e, clock } = await setup(r => r.write(id, 0, 'x', C(id)));
+  relay.down = true; e.edit(id, { ...e.value(id), question: 'one' }); await clock.run(1000); await settle();
+  eq(e.state(id), 'unanswered', 'unanswered'); eq(e.ui.relay, 'offline', 'offline'); ok(!e.edit(id, { ...e.value(id), question: 'x' }), 'no edit while offline'); ok(!e.canWrite(), 'canWrite false');
+  relay.down = false; await clock.run(15000); await settle(); await settle();
+  const p = relay.posts('/record/case'); eq(p[p.length - 1].body.requestId, p[0].body.requestId, 'same requestId'); eq(e.state(id), 'clean', 'clean'); eq(relay.cases[id].rev, 2, 'rev 2');
+});
+test('U-21 drafts made before going offline are sent after the Pending, in order', async () => {
+  const id = 'CASE-20261108-001-aaaaa1';
+  const { relay, e, clock } = await setup(r => r.write(id, 0, 'x', C(id)));
+  relay.failNext = { match: (m, p) => m === 'POST', applyThenDrop: false, status: 503, body: { error: 'busy' } };
+  const release = relay.hold('POST', '/record/case');
+  e.edit(id, { ...e.value(id), question: 'one' }); await clock.run(1000); await settle();
+  e.edit(id, { ...e.value(id), question: 'two' });         // while sending
+  release(); await settle();
+  eq(e.ui.relay, 'offline', 'busy -> offline'); await clock.run(15000); await settle(); await settle(); await settle();
+  const p = relay.posts('/record/case');
+  eq(p.map(x => x.body.case.question), ['one', 'one', 'two'], 'Pending again, then drafts'); eq(relay.cases[id].value.question, 'two', 'final');
+});
+test('U-19/U-06 restart: the cached Pending is sent as it is and the relay decides', async () => {
+  const id = 'CASE-20261108-001-aaaaa1';
+  // written, answer lost, then another screen wrote twice
+  let s = await setup(r => r.write(id, 0, 'x', C(id)));
+  s.relay.failNext = { match: m => m === 'POST', applyThenDrop: true };
+  s.e.edit(id, { ...s.e.value(id), question: 'mine' }); await s.clock.run(1000); await settle();
+  eq(s.e.state(id), 'unanswered', 'unanswered');
+  s.relay.other(id, v => v.question = 'other1'); s.relay.other(id, v => v.question = 'other2');
+  const e2 = engine(s.relay, s.storage, Clock()); await e2.start('http://relay'); await settle(); await settle();
+  eq(e2.state(id), 'clean', 'replayed -> clean, not conflict'); eq(e2.value(id).question, 'other2', 're-read the latest'); eq(e2.rev(id), 4, 'rev 4');
+  // not written, another screen wrote
+  s = await setup(r => r.write(id, 0, 'x', C(id)));
+  s.relay.down = true; s.e.edit(id, { ...s.e.value(id), question: 'mine' }); await s.clock.run(1000); await settle(); s.relay.down = false;
+  s.relay.other(id, v => v.question = 'other');
+  const e3 = engine(s.relay, s.storage, Clock()); await e3.start('http://relay'); await settle(); await settle();
+  eq(e3.state(id), 'conflict', 'conflict'); eq(e3.value(id).question, 'mine', 'own edit kept'); eq(s.relay.cases[id].value.question, 'other', 'relay not overwritten');
+  // new Case whose first write did not answer
+  s = await setup(); s.relay.down = true; s.e.addCase(C('CASE-20261108-002-bbbbb2')); await settle(); s.relay.down = false;
+  const e4 = engine(s.relay, s.storage, Clock()); await e4.start('http://relay'); await settle(); await settle();
+  eq(e4.state('CASE-20261108-002-bbbbb2'), 'clean', 'new Case written after restart'); eq(s.relay.cases['CASE-20261108-002-bbbbb2'].rev, 1, 'rev 1');
+});
+test('U-20 the cache cannot be written: nothing is sent, edits stop, JSON export works, resumes later', async () => {
+  const id = 'CASE-20261108-001-aaaaa1';
+  const { relay, e, clock, storage } = await setup(r => r.write(id, 0, 'x', C(id)));
+  storage.broken = true;
+  ok(!e.edit(id, { ...e.value(id), question: 'one' }), 'edit refused (drafts not cached)'); eq(e.ui.cache, 'failed', 'cache failed');
+  await clock.run(1000); await settle(); eq(relay.posts().length, 0, 'no POST');
+  e._items[id].value = { ...e.value(id), question: 'in memory' }; e._items[id].dirty = true;
+  e.noteNotSent(id, { task: 'T-1', at: 'x', why: '控えに書けません' });
+  const ex = e.unsavedExports(); eq(ex.length, 1, 'one export'); const o = JSON.parse(ex[0].text);
+  eq([o.format, o.case.question, o.notSent[0].task], ['ats-operational-case', 'in memory', 'T-1'], 'export has the Case and notSent outside it');
+  ok(!('notSent' in o.case), 'notSent is not in the Case (D-12)');
+  storage.broken = false; await clock.run(30000); await settle(); await settle();
+  eq(e.ui.cache, 'ok', 'cache ok again'); eq(relay.cases[id].value.question, 'in memory', 'sent after the cache works');
+});
+test('U-22 loading stops part way, a corrupt Case and corrupt settings', async () => {
+  const a = 'CASE-20261108-001-aaaaa1', b = 'CASE-20261108-002-bbbbb2', c = 'CASE-20261108-003-ccccc3';
+  const relay = Relay(); [a, b, c].forEach(id => relay.write(id, 0, 'x', C(id)));
+  const clock = Clock(), storage = Storage(); let n = 0;
+  const real = relay.fetch; relay.fetch = async (u, i) => { if (u.includes('/record/case?') && ++n === 2) throw new Error('down'); return real(u, i); };
+  const e = engine(relay, storage, clock); await e.start('http://relay'); await settle();
+  eq(e.ui.load, 'loadFailed', 'loadFailed'); ok(!e.canWrite(), 'no writing'); ok(!e.addCase(C('CASE-20261108-009-zzzzz9')), 'no new Case');
+  relay.other(a, v => v.question = 'changed');
+  await clock.run(15000); await settle(); await settle();
+  eq(e.ui.load, 'loaded', 'loaded after retry'); eq(e.value(a).question, 'changed', 'changed Case re-read');
+  const r2 = Relay(); [a, b].forEach(id => r2.write(id, 0, 'x', C(id))); r2.corrupt.add(b); r2.settingsCorrupt = true;
+  const e2 = engine(r2, Storage(), Clock()); await e2.start('http://relay'); await settle();
+  eq([e2.ui.load, e2.state(a), e2.state(b), e2.state('_settings')], ['loaded', 'clean', 'corrupt', 'corrupt'], 'corrupt ones listed, others loaded');
+  eq((await e2.saveNow(a)).ok, false, 'no sending while the settings are corrupt');
+  const r3 = Relay(); r3.down = true; const e3 = engine(r3, Storage(), Clock()); await e3.start('http://relay'); await settle();
+  eq([e3.ui.load, e3.ui.relay], ['loadFailed', 'offline'], 'GET /record unreachable: loadFailed and offline (section 4.3-2)');
+});
+test('U-23 settings are written to /record/settings with their own rev, and conflict like a Case', async () => {
+  const id = 'CASE-20261108-001-aaaaa1';
+  const { relay, e, clock } = await setup(r => r.write(id, 0, 'x', C(id)));
+  e.edit('_settings', { observers: [{ name: 'GPT' }] }); await clock.run(1000); await settle();
+  eq(relay.posts('/record/settings').length, 1, 'settings POST'); eq([relay.settings.rev, relay.cases[id].rev], [1, 1], 'separate revs');
+  relay.other('_settings', v => v.observers = []);
+  e.edit('_settings', { observers: [{ name: 'Meta' }] }); await clock.run(1000); await settle();
+  eq(e.state('_settings'), 'conflict', 'settings conflict'); eq((await e.saveNow(id)).ok, false, 'no delivery while settings are not clean');
+});
+test('U-25 canWrite and resume(): 12 combinations, order of recovery, one resume at a time', async () => {
+  const id = 'CASE-20261108-001-aaaaa1';
+  const { relay, e, clock, storage } = await setup(r => r.write(id, 0, 'x', C(id)));
+  let trues = 0;
+  for (const load of ['loading', 'loaded', 'loadFailed']) for (const rl of ['online', 'offline']) for (const ca of ['ok', 'failed']) {
+    Object.assign(e.ui, { load, relay: rl, cache: ca }); if (e.canWrite()) trues++;
+    if (!e.canWrite()) ok(!e.edit(id, e.value(id)) && !e.addCase(C('CASE-20261108-007-ggggg7')), `nothing allowed ${load}/${rl}/${ca}`);
+  }
+  eq(trues, 1, 'only one combination writes');
+  Object.assign(e.ui, { load: 'loaded', relay: 'online', cache: 'ok' });
+  // (3) relay back but cache failing: nothing is sent until the cache works
+  e.edit(id, { ...e.value(id), question: 'q' }); storage.broken = true; await clock.run(1000); await settle();
+  eq(relay.posts().length, 0, 'not sent while the cache fails'); storage.broken = false; await clock.run(30000); await settle(); await settle();
+  eq(relay.posts().length, 1, 'sent once the cache works');
+  // (4) manual reload while offline: GET /record at once
+  relay.down = true; await e.refreshList(); eq(e.ui.relay, 'offline', 'offline'); relay.down = false;
+  const before = relay.log.length; const okNow = await e.manualReload(); await settle();
+  ok(okNow && relay.log.slice(before).some(x => x.path === '/record'), 'manual reload tried GET /record now'); eq(e.ui.relay, 'online', 'online');
+  // (5) overlapping resume(): the GET is held while many recoveries arrive
+  relay.down = true; e.edit(id, { ...e.value(id), question: 'r' }); await clock.run(1000); await settle(); relay.down = false;
+  const release = relay.hold('GET', '/record'); e.ui.relay = 'online'; e.ui.load = 'loadFailed';
+  const runs = []; for (let i = 0; i < 5; i++) runs.push(e.resume());
+  await settle();                                             // the resume's own GET /record is the one held
+  ok(runs.every(r => r === runs[0]) && e._running(), 'one resume running, held at its GET'); e.manualReload();
+  const tick = clock.run(30000); await settle();               // 15 s and 30 s checks fire while the GET is held
+  ok(e._running() && runs.every(r => r === runs[0]), 'still one resume while the checks fire');
+  release(); await tick; await Promise.all(runs); await settle(); await settle();
+  const posts = relay.posts('/record/case').filter(x => x.body.case.question === 'r');
+  eq(posts.length, 2, 'the Pending was POSTed once before going offline and once after (no duplicates)'); eq(e.state(id), 'clean', 'clean');
+});
+test('U-26 Q-1: no 200, nothing sent; notSent survives a JSON export and import', async () => {
+  const id = 'CASE-20261108-001-aaaaa1';
+  const { relay, e, clock } = await setup(r => r.write(id, 0, 'x', C(id)));
+  relay.other(id, v => v.question = 'other');
+  e.edit(id, { ...e.value(id), requests: [{ task: 'T-1', packet: 'p', deliveries: [] }] });
+  const r = await e.saveNow(id); eq(r.ok, false, 'saveNow false on conflict'); eq(relay.cases[id].rev, 2, 'relay unchanged');
+  e.noteNotSent(id, { task: 'T-1', at: 'now', why: r.why }); e.noteNotSent(id, { task: 'T-1', at: 'again', why: r.why });
+  eq(e.ui.notSent[id].length, 1, 'same task not doubled');
+  const o = JSON.parse(e.unsavedExports().find(x => x.id === id).text);
+  const e2 = engine(Relay(), Storage(), Clock()); await e2.start('http://relay'); e2.restoreNotSent(o.case.id, o.notSent);
+  eq(e2.ui.notSent[id][0].task, 'T-1', 'notSent restored from the JSON');
+});
+test('U-27 drafts after a resent Pending: 200, replayed same, replayed later, drafts only', async () => {
+  const id = 'CASE-20261108-001-aaaaa1';
+  async function scenario(lose, otherAfter) {
+    const s = await setup(r => r.write(id, 0, 'x', C(id)));
+    s.relay.failNext = { match: m => m === 'POST', applyThenDrop: lose, status: 0 };
+    if (!lose) s.relay.down = true;
+    s.e.edit(id, { ...s.e.value(id), question: 'p' }); await s.clock.run(1000); await settle();
+    s.relay.down = false; s.relay.failNext = null;
+    s.e._items[id].value = { ...s.e.value(id), question: 'drafts' }; s.e._items[id].dirty = true;   // edits made before going offline
+    if (otherAfter) s.relay.other(id, v => v.question = 'other');
+    await s.clock.run(15000); await settle(); await settle(); await settle();
+    return s;
+  }
+  let s = await scenario(false, false);
+  eq([s.e.state(id), s.relay.cases[id].value.question], ['clean', 'drafts'], '(1) 200 then drafts on its rev');
+  s = await scenario(true, false);
+  eq([s.e.state(id), s.relay.cases[id].value.question], ['clean', 'drafts'], '(2) replayed, currentRev = rev: drafts sent');
+  s = await scenario(true, true);
+  eq([s.e.state(id), s.e.value(id).question, s.relay.cases[id].value.question], ['conflict', 'drafts', 'other'], '(3) replayed, later write: conflict, drafts kept');
+  ok(!s.relay.posts('/record/case').some(x => x.body.baseRev === 3 && x.body.case.question === 'drafts'), '(3) no write with a raised baseRev');
+  // (4) drafts only in the cache
+  for (const other of [false, true]) {
+    const r = Relay(); r.write(id, 0, 'x', C(id)); const st = Storage();
+    st.setItem('ats-operational-001-3b', JSON.stringify({ format: 'ats-ui-cache-1', pending: {}, drafts: { [id]: { baseRev: 1, value: C(id, { question: 'd' }) } }, notSent: {} }));
+    if (other) r.other(id, v => v.question = 'other');
+    const e = engine(r, st, Clock()); await e.start('http://relay'); await settle(); await settle();
+    eq(e.state(id), other ? 'conflict' : 'clean', '(4) drafts only: ' + (other ? 'rev differs -> conflict' : 'same rev -> sent'));
+    eq(r.posts('/record/case').length, other ? 0 : 1, '(4) ' + (other ? 'no write is even tried (section 4.3-6)' : 'one write'));
+  }
+  // conflict: re-read keeps own edits until dropped
+  s = await scenario(true, true); await s.e.rereadLatest(id);
+  eq([s.e.state(id), s.e.value(id).question, s.e.mine(id).question], ['clean', 'other', 'drafts'], 're-read shows the latest; own edits kept');
+  await s.e.dropDrafts(id); eq(s.e.mine(id), null, 'dropped');
+});
+test('U-24 carry.rev equals the rev the relay gives the write', async () => {
+  const id = 'CASE-20261108-001-aaaaa1';
+  const { relay, e, clock } = await setup(r => r.write(id, 0, 'x', C(id)));
+  e.edit(id, { ...e.value(id), question: 'q' }); await clock.run(1000); await settle();
+  eq(relay.cases[id].value.carry.rev, relay.cases[id].rev, 'carry.rev = rev'); eq(relay.cases[id].value.carry.format, 'ats-carry-1', 'format');
+  e.addCase(C('CASE-20261108-002-bbbbb2')); await settle(); eq(relay.cases['CASE-20261108-002-bbbbb2'].value.carry.rev, 1, 'new Case carry.rev 1');
+});
+test('U-15/U-17 archive: newest per Case by number; the listing must say folder', async () => {
+  const id = 'CASE-20261021-001-abc123', n = k => `${id}--20261108T120000000Z${k}.json`;
+  const rows = StudioRecord.archiveRows([{ name: n('') }, { name: n('-10') }, { name: n('-2') }, { name: `CASE-20261021-002-zzz999--20261108T110000000Z.json` }]);
+  eq(rows.map(x => x.name), [n('-10'), 'CASE-20261021-002-zzz999--20261108T110000000Z.json'], 'one row per Case, -10 newest');
+  const { relay, e } = await setup();
+  relay.archives = [200, { archives: [] }]; eq(await e.takenIds(), null, 'no folder field: cannot create');
+  relay.archives = [409, { error: 'link' }]; eq(await e.takenIds(), null, '409: cannot create');
+  relay.archives = [200, { folder: 'absent', archives: [] }]; eq(await e.takenIds(), [], 'absent: can create');
+  relay.archives = [200, { folder: 'present', archives: [{ name: n('') }] }]; eq(await e.takenIds(), [id], 'archived IDs are taken');
+});
+test('U-12 the cache key is its own; the old record key is never touched', async () => {
+  const { storage, e } = await setup(); e.addCase(C('CASE-20261108-001-aaaaa1')); await settle();
+  eq(storage.keys(), ['ats-operational-001-3b'], 'only ats-operational-001-3b');
+});
+
+(async () => {
+  for (const [name, f] of T) {
+    cur = name; document.getElementById('out').textContent = 'running ' + name;
+    try { await Promise.race([f(), new Promise((_, no) => setTimeout(() => no(new Error('timed out after 5 s')), 5000))]); }
+    catch (err) { results.push({ test: name, ok: false, what: 'threw ' + (err && err.stack || err) }); }
+  }
+  const failures = results.filter(r => !r.ok);
+  const out = { total: results.length, pass: results.length - failures.length, fail: failures.length, failures, tests: T.map(([n]) => ({ name: n, fail: results.filter(r => r.test === n && !r.ok).length })) };
+  document.getElementById('out').textContent = JSON.stringify(out, null, 2);
+  window.__result = out;
+})();
+</script>
+</body></html>
